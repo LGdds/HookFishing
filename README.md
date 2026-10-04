@@ -378,7 +378,7 @@ mvn -version
 ## 2. Clonar o projeto
 
 ```bash
-git clone <HookFishing>
+git clone <https://github.com/LGdds/HookFishing.git>
 ```
 
 Entrar na pasta:
