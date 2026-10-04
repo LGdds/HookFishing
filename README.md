@@ -1,4 +1,4 @@
-# 🐟 FishAPI
+# 🐟 HookFishing
 
 API REST desenvolvida em **Java + Spring Boot** para gerenciamento de peixes e recursos relacionados a um aquário.
 
@@ -42,7 +42,7 @@ O projeto foi desenvolvido com foco em demonstrar os principais recursos de uma 
 
 # 🐠 Sobre o projeto
 
-O **FishAPI** é uma API REST para gerenciamento de um ambiente de aquário.
+O **HookFishing** é uma API REST para gerenciamento de um ambiente de aquário.
 
 A aplicação permite cadastrar e administrar:
 
