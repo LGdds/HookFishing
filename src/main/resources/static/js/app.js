@@ -7,13 +7,17 @@
  *   X-API-Key          -> obtida no login (e-mail e senha); define o papel do usuário
  *   X-Idempotency-Key  -> gerada automaticamente em todo cadastro (POST)
  *   X-API-Version      -> alternância v1 / v2 na aba Peixes
- *   X-RateLimit-*      -> barra de rate limit no topo e aviso de 429 com Retry-After
+ *   X-RateLimit-*      -> barra de rate limit no topo e aviso de 429 com Retry-After (e bloqueio)
+ *   Planos             -> aba Planos: preços, consumo da chave e troca de plano (monetização)
  *   CORS               -> funciona também se o front-end for aberto em outra origem permitida
  * ===================================================================== */
 
-// Quando servido pela própria API (porta 8080) usa caminhos relativos; caso contrário, chama a API em localhost:8080.
+// Servido pela própria API (localhost:8080 ou Render, https sem porta): caminhos relativos.
+// Aberto como arquivo ou num servidor de desenvolvimento (Live Server, Vite...): chama a API em localhost:8080.
+// Para apontar para outra API, defina window.HOOKFISHING_API antes de carregar este script.
+const PORTAS_DESENVOLVIMENTO = ['3000', '5173', '5500', '63342'];
 const API = window.HOOKFISHING_API
-    ?? (location.protocol !== 'file:' && location.port === '8080' ? '' : 'http://localhost:8080');
+    ?? (location.protocol === 'file:' || PORTAS_DESENVOLVIMENTO.includes(location.port) ? 'http://localhost:8080' : '');
 
 const CHAVE_STORAGE = 'hookfishing.apiKey';
 
@@ -124,11 +128,15 @@ async function api(metodo, caminho, opcoes = {}) {
     }
 
     const resultado = { ok: resposta.ok, status: resposta.status, dados, headers: resposta.headers };
-    atualizarRateLimit(resposta.headers);
+    // A barra e o aviso de 429 mostram só o limite da chave do usuário (os testes também usam chaves de demonstração)
+    const daSessao = opcoes.semChave || !chave || chave === estado.chave;
+    if (daSessao) {
+        atualizarRateLimit(resposta.headers);
+    }
     registrarLog(metodo, caminho, resultado, headers);
 
-    if (resposta.status === 429) {
-        mostrarAviso429(Number(resposta.headers.get('Retry-After') || 60));
+    if (resposta.status === 429 && daSessao) {
+        mostrarAviso429(resposta);
     }
     return resultado;
 }
@@ -153,18 +161,28 @@ function atualizarRateLimit(headers) {
     barra.style.width = (proporcao * 100) + '%';
     barra.style.background = proporcao > .4 ? '#46d3b0' : proporcao > .15 ? '#f2b84b' : '#ff6b5a';
     const reset = headers.get('X-RateLimit-Reset');
+    const politica = headers.get('X-RateLimit-Policy');
     $('#limite-texto').textContent = `${restantes}/${limite}`;
-    $('.limite').title = `Rate limiting (token bucket): ${restantes} de ${limite} fichas restantes. O balde enche em ${reset}s.`;
+    $('.limite').title = `Rate limiting (token bucket): ${restantes} de ${limite} fichas restantes. O balde enche em ${reset}s.`
+        + (politica ? `\nRegra: ${politica}` : '');
 }
 
-function mostrarAviso429(segundos) {
+/** Aviso de 429: contagem regressiva do Retry-After; se a chave foi bloqueada, mostra até quando. */
+function mostrarAviso429(resposta) {
     const aviso = $('#aviso-429');
     clearInterval(estado.timer429);
-    let restante = segundos;
+    let restante = Number(resposta.headers.get('Retry-After') || 60);
+    const bloqueadoAte = resposta.headers.get('X-RateLimit-Blocked-Until');
+    const mensagem = resposta.dados?.mensagem || '';
     const atualizar = () => {
         aviso.hidden = false;
-        aviso.textContent = `Limite de requisições excedido (HTTP 429). `
-            + `Retry-After: tente novamente em ${restante}s.`;
+        aviso.classList.toggle('aviso-429--bloqueio', !!bloqueadoAte);
+        aviso.innerHTML = bloqueadoAte
+            ? `<b>Acesso bloqueado até ${esc(new Date(bloqueadoAte).toLocaleTimeString('pt-BR'))}</b> `
+                + `(faltam ${restante}s). Você continuou enviando requisições depois do limite. `
+                + `Aguarde: novas tentativas durante o bloqueio não são atendidas.`
+            : `<b>Limite de requisições excedido (HTTP 429).</b> Retry-After: tente novamente em ${restante}s.`
+                + (mensagem ? `<span class="aviso-429__detalhe">${esc(mensagem)}</span>` : '');
         if (restante-- <= 0) {
             clearInterval(estado.timer429);
             aviso.hidden = true;
@@ -178,7 +196,7 @@ function mostrarAviso429(segundos) {
  * Log de requisições (painel lateral)
  * ------------------------------------------------------------------- */
 
-const HEADERS_LOG = ['X-API-Version', 'X-RateLimit-Remaining', 'Retry-After', 'X-Idempotent-Replayed'];
+const HEADERS_LOG = ['X-API-Version', 'X-RateLimit-Remaining', 'Retry-After', 'X-RateLimit-Blocked-Until', 'X-Idempotent-Replayed'];
 
 function registrarLog(metodo, caminho, resultado, headersEnviados) {
     const lista = $('#log-lista');
@@ -507,8 +525,18 @@ function abrirApp() {
     const selo = $('#usuario-papel');
     selo.textContent = estado.usuario.papel;
     selo.className = `selo selo--${estado.usuario.papel}`;
+    atualizarSeloPlano();
     montarAbas();
-    selecionarAba(estado.aba in ENTIDADES && pode(estado.aba, 'CONSULTAR') ? estado.aba : 'peixes');
+    const abaValida = (estado.aba in ENTIDADES && pode(estado.aba, 'CONSULTAR')) || ['planos', 'testes'].includes(estado.aba);
+    selecionarAba(abaValida ? estado.aba : 'peixes');
+}
+
+function atualizarSeloPlano() {
+    const plano = estado.usuario?.plano || 'GRATUITO';
+    const selo = $('#usuario-plano');
+    selo.textContent = NOMES_PLANOS[plano] || plano;
+    selo.className = `selo selo-plano selo-plano--${plano}`;
+    selo.title = `Plano ${NOMES_PLANOS[plano] || plano}: veja limites e preços na aba Planos`;
 }
 
 /* ---------------------------------------------------------------------
@@ -524,17 +552,25 @@ function montarAbas() {
             `<button type="button" class="aba" data-aba="${id}">${esc(def.titulo)}</button>`);
     });
     abas.insertAdjacentHTML('beforeend',
-        `<button type="button" class="aba aba--destaque" data-aba="testes">Testes da Parte 2</button>`);
+        `<button type="button" class="aba" data-aba="planos">Planos</button>`
+        + `<button type="button" class="aba aba--destaque" data-aba="testes">Testes da Parte 2</button>`);
 }
 
 function selecionarAba(id) {
     estado.aba = id;
     $$('.aba').forEach(b => b.classList.toggle('ativa', b.dataset.aba === id));
 
+    $('#painel-planos').hidden = id !== 'planos';
     if (id === 'testes') {
         $('#painel-entidade').hidden = true;
         $('#painel-testes').hidden = false;
         montarTestes();
+        return;
+    }
+    if (id === 'planos') {
+        $('#painel-entidade').hidden = true;
+        $('#painel-testes').hidden = true;
+        montarPlanos();
         return;
     }
 
@@ -882,6 +918,99 @@ async function excluir(item) {
  * Cada cenário faz requisições reais e compara o status obtido com o esperado.
  * ------------------------------------------------------------------- */
 
+/* ---------------------------------------------------------------------
+ * Planos (monetização) e consumo do rate limit
+ * ------------------------------------------------------------------- */
+
+const NOMES_PLANOS = { GRATUITO: 'Gratuito', BASICO: 'Básico', PROFISSIONAL: 'Profissional' };
+
+function duracao(segundos) {
+    if (segundos < 60) return `${segundos} s`;
+    const min = Math.floor(segundos / 60);
+    const s = segundos % 60;
+    return s ? `${min} min ${s} s` : `${min} min`;
+}
+
+async function montarPlanos() {
+    const painel = $('#painel-planos');
+    painel.innerHTML = '<p class="painel__descricao">Carregando planos...</p>';
+
+    const [planos, limites] = await Promise.all([api('GET', '/planos'), api('GET', '/planos/limites')]);
+    if (!planos.ok) {
+        painel.innerHTML = `<p class="erro">${esc(mensagemErro(planos))}</p>`;
+        return;
+    }
+    const lista = planos.dados?._embedded?.planos || [];
+    const atual = estado.usuario?.plano || 'GRATUITO';
+    const l = limites.ok ? limites.dados : null;
+    const proporcao = l ? Math.max(0, Math.min(1, l.fichasRestantes / l.capacidade)) : 0;
+
+    painel.innerHTML = `
+        <div class="painel__cabecalho">
+            <div>
+                <h1>Planos</h1>
+                <p class="painel__descricao">A API é freemium: toda conta começa no plano Gratuito. Os planos pagos
+                    aumentam o limite de requisições da sua API Key. A contratação aqui é uma simulação, sem cobrança.</p>
+            </div>
+        </div>
+
+        <div class="planos">
+            ${lista.map(p => `
+                <article class="plano ${p.codigo === atual ? 'plano--atual' : ''}">
+                    <header>
+                        <h2>${esc(p.nome)}</h2>
+                        ${p.codigo === atual ? '<span class="plano__marca">Seu plano</span>' : ''}
+                    </header>
+                    <p class="plano__preco">${esc(p.preco)}</p>
+                    <p class="plano__descricao">${esc(p.descricao)}</p>
+                    <dl class="plano__limites">
+                        <div><dt>De uma vez</dt><dd>${p.capacidade} requisições</dd></div>
+                        <div><dt>Recarga</dt><dd>${p.recargaPorMinuto} por minuto (${esc(p.ritmo)})</dd></div>
+                    </dl>
+                    <button class="btn ${p.codigo === atual ? '' : 'btn--primario'}" type="button"
+                            data-plano="${esc(p.codigo)}" ${p.codigo === atual ? 'disabled' : ''}>
+                        ${p.codigo === atual ? 'Plano atual' : (p.precoMensal > 0 ? 'Contratar' : 'Voltar ao Gratuito')}
+                    </button>
+                </article>`).join('')}
+        </div>
+
+        ${l ? `
+        <section class="consumo">
+            <h2>Seu consumo agora</h2>
+            <div class="consumo__barra"><div style="width:${proporcao * 100}%"></div></div>
+            <p><b>${l.fichasRestantes} de ${l.capacidade}</b> requisições disponíveis.
+                ${l.segundosAteEncher ? `O balde enche de novo em ${duracao(l.segundosAteEncher)}.` : 'O balde está cheio.'}</p>
+
+            <h3>O que acontece quando o limite estoura</h3>
+            <ol class="consumo__etapas">
+                <li><b>Limite atingido.</b> A API responde <code>429 Too Many Requests</code> com o header
+                    <code>Retry-After</code>: quantos segundos esperar pela próxima ficha (no seu plano, ${esc(l.ritmo)}).</li>
+                <li><b>Insistiu?</b> ${l.penalidadeTentativas} requisições seguidas recusadas bloqueiam a chave por
+                    <b>${duracao(l.penalidadeSegundos)}</b>, mesmo que o balde recarregue. O 429 passa a trazer
+                    <code>X-RateLimit-Blocked-Until</code> com o horário de liberação.</li>
+                <li><b>Reincidiu?</b> Um novo bloqueio em menos de ${duracao(l.janelaReincidenciaSegundos)} dobra o tempo
+                    (${duracao(l.penalidadeSegundos * 2)}, ${duracao(l.penalidadeSegundos * 4)}...), até no máximo
+                    <b>${duracao(l.penalidadeMaximaSegundos)}</b>.</li>
+                <li><b>Esperou o Retry-After?</b> A contagem de tentativas zera na próxima requisição atendida.</li>
+            </ol>
+        </section>` : ''}`;
+}
+
+async function contratarPlano(plano) {
+    const r = await api('PUT', '/planos/assinatura', { corpo: { plano } });
+    if (!r.ok) {
+        toast('Não foi possível trocar o plano.', 'erro', mensagemErro(r));
+        return;
+    }
+    const me = await api('GET', '/api-keys/me');
+    if (me.ok) {
+        estado.usuario = me.dados;
+    }
+    atualizarSeloPlano();
+    toast(r.dados?.mensagem || 'Plano alterado.', 'ok', r.dados?.cobranca || '');
+    montarPlanos();
+}
+
 const ROTULOS_RECURSOS = {
     peixes: 'Peixes', alimentacoes: 'Alimentações', especies: 'Espécies', aquarios: 'Aquários',
     cuidadores: 'Cuidadores', 'api-keys': 'API Keys'
@@ -930,11 +1059,17 @@ const GRUPOS_TESTE = [
         casos: ['auth-sem', 'auth-invalida', 'auth-login', 'auth-cuidador', 'auth-visitante', 'auth-biologo', 'auth-me']
     },
     {
-        id: 'rate', titulo: 'Limite de requisições', requisito: '4.3',
-        descricao: 'Token bucket: cada chave tem um balde de 60 fichas, reabastecido com 1 ficha por segundo. '
-            + 'Sem fichas, a API responde 429 com o header Retry-After. Este cenário esvazia o balde da chave atual '
-            + 'e não entra em "Executar todos".',
-        casos: ['rate']
+        id: 'planos', titulo: 'Planos e consumo', requisito: '4.3',
+        descricao: 'Cada plano define o tamanho do balde (token bucket) da API Key. A tabela de planos é pública.',
+        casos: ['planos-listar', 'planos-limites']
+    },
+    {
+        id: 'rate', titulo: 'Limite de requisições e bloqueio', requisito: '4.3',
+        descricao: 'Usam a chave de demonstração do visitante (plano Gratuito: 20 requisições de uma vez, recarga de 30 '
+            + 'por minuto). Ao esvaziar o balde, a API responde 429 com Retry-After. Quem insiste 5 vezes seguidas é '
+            + 'bloqueado por 60 s (o tempo dobra a cada reincidência em 10 min, até 15 min). Estes cenários não entram '
+            + 'em "Executar todos" e não afetam o limite da sua conta.',
+        casos: ['rate', 'rate-bloqueio']
     },
     {
         id: 'cors', titulo: 'CORS', requisito: '4.4',
@@ -1073,6 +1208,34 @@ const CASOS = {
             return resultadoSimples(await api('GET', '/api-keys/me'), 200);
         }
     },
+    'planos-listar': {
+        nome: 'Tabela de planos sem chave',
+        requisicao: 'GET /planos (sem X-API-Key)',
+        esperado: '200 com 3 planos',
+        async executar() {
+            const r = await api('GET', '/planos', { semChave: true });
+            const planos = r.dados?._embedded?.planos || [];
+            return {
+                passou: r.status === 200 && planos.length === 3,
+                obtido: `HTTP ${r.status}, ${planos.length} plano(s)`,
+                detalhe: planos.map(p => `${p.codigo}: ${p.preco}, ${p.capacidade} de uma vez, ${p.recargaPorMinuto}/min`).join('\n')
+                    + `\n\nX-RateLimit-Policy: ${r.headers.get('X-RateLimit-Policy')}`
+            };
+        }
+    },
+    'planos-limites': {
+        nome: 'Consumo da chave atual',
+        requisicao: 'GET /planos/limites',
+        esperado: '200 com o plano da chave',
+        async executar() {
+            const r = await api('GET', '/planos/limites');
+            return {
+                passou: r.status === 200 && r.dados?.plano === (estado.usuario?.plano || 'GRATUITO'),
+                obtido: `HTTP ${r.status}, ${r.dados?.plano ?? '-'} ${r.dados ? `(${r.dados.fichasRestantes}/${r.dados.capacidade})` : ''}`,
+                detalhe: `X-RateLimit-Policy: ${r.headers.get('X-RateLimit-Policy')}\n\n` + corpo(r)
+            };
+        }
+    },
     rate: {
         nome: 'Requisições seguidas até o limite',
         requisicao: 'GET /especies (repetido)',
@@ -1081,8 +1244,8 @@ const CASOS = {
             const contagem = {};
             let bloqueio = null;
             let total = 0;
-            for (let i = 1; i <= 200; i++) {
-                const r = await api('GET', '/especies?size=1');
+            for (let i = 1; i <= 100; i++) {
+                const r = await api('GET', '/especies?size=1', { chave: CHAVES_DEMO.VISITANTE });
                 total = i;
                 contagem[r.status] = (contagem[r.status] || 0) + 1;
                 if (r.status === 429 || r.status === 0) {
@@ -1098,10 +1261,47 @@ const CASOS = {
             return {
                 passou: !!retry,
                 obtido: `429 na ${total}ª, Retry-After ${retry}s`,
-                detalhe: `${total} requisições: ${resumo}\n`
+                detalhe: `Chave usada: ${CHAVES_DEMO.VISITANTE}\n${total} requisições: ${resumo}\n`
                     + `Retry-After: ${retry}\n`
                     + `X-RateLimit-Limit: ${bloqueio.headers.get('X-RateLimit-Limit')}\n`
-                    + `X-RateLimit-Remaining: ${bloqueio.headers.get('X-RateLimit-Remaining')}\n\n`
+                    + `X-RateLimit-Remaining: ${bloqueio.headers.get('X-RateLimit-Remaining')}\n`
+                    + `X-RateLimit-Policy: ${bloqueio.headers.get('X-RateLimit-Policy')}\n`
+                    + (bloqueio.headers.get('X-RateLimit-Blocked-Until')
+                        ? `X-RateLimit-Blocked-Until: ${bloqueio.headers.get('X-RateLimit-Blocked-Until')}\n` : '')
+                    + '\n' + corpo(bloqueio)
+            };
+        }
+    },
+    'rate-bloqueio': {
+        nome: 'Insistir depois do 429',
+        requisicao: 'GET /especies (até ser bloqueado)',
+        esperado: '429 + X-RateLimit-Blocked-Until',
+        async executar() {
+            const linhas = [];
+            let bloqueio = null;
+            for (let i = 1; i <= 100; i++) {
+                const r = await api('GET', '/especies?size=1', { chave: CHAVES_DEMO.VISITANTE });
+                if (r.status === 0) {
+                    return { passou: false, obtido: 'sem resposta', detalhe: corpo(r) };
+                }
+                if (r.status === 429) {
+                    linhas.push(`${i}ª: HTTP 429, Retry-After ${r.headers.get('Retry-After')}s`
+                        + (r.headers.get('X-RateLimit-Blocked-Until') ? ' (bloqueado)' : ''));
+                }
+                if (r.headers.get('X-RateLimit-Blocked-Until')) {
+                    bloqueio = r;
+                    break;
+                }
+            }
+            if (!bloqueio) {
+                return { passou: false, obtido: 'sem bloqueio', detalhe: linhas.join('\n') };
+            }
+            const ate = bloqueio.headers.get('X-RateLimit-Blocked-Until');
+            return {
+                passou: true,
+                obtido: `bloqueado por ${bloqueio.headers.get('Retry-After')}s`,
+                detalhe: `Chave usada: ${CHAVES_DEMO.VISITANTE}\n${linhas.join('\n')}\n\n`
+                    + `X-RateLimit-Blocked-Until: ${ate} (${new Date(ate).toLocaleTimeString('pt-BR')} no seu horário)\n\n`
                     + corpo(bloqueio)
             };
         }
@@ -1125,7 +1325,7 @@ const CASOS = {
                         + 'Para ver o CORS em ação, abra o index.html pelo Live Server (porta 5500).',
                 '',
                 'Preflight pelo terminal:',
-                'curl -i -X OPTIONS http://localhost:8080/peixes \\',
+                `curl -i -X OPTIONS ${API || location.origin}/peixes \\`,
                 '  -H "Origin: http://localhost:5500" \\',
                 '  -H "Access-Control-Request-Method: POST" \\',
                 '  -H "Access-Control-Request-Headers: X-API-Key, X-Idempotency-Key, Content-Type"'
@@ -1328,7 +1528,7 @@ async function executarTodos() {
     botao.disabled = true;
     try {
         for (const grupo of GRUPOS_TESTE) {
-            if (grupo.id === 'rate') continue;
+            if (grupo.id === 'rate') continue;  // esvazia o balde e bloqueia a chave de demonstração
             for (const id of grupo.casos) {
                 await executarCaso(id);
             }
@@ -1410,6 +1610,14 @@ function registrarEventos() {
         if (botao.dataset.editar != null) abrirFormulario(estado.itens[botao.dataset.editar]);
         if (botao.dataset.excluir != null) excluir(estado.itens[botao.dataset.excluir]);
         if (botao.dataset.extra != null) def.acaoExtra.executar(estado.itens[botao.dataset.extra]);
+    });
+
+    $('#painel-planos').addEventListener('click', e => {
+        const botao = e.target.closest('[data-plano]');
+        if (botao && !botao.disabled) {
+            botao.disabled = true;
+            contratarPlano(botao.dataset.plano);
+        }
     });
 
     $('#modal-form').addEventListener('submit', salvarFormulario);

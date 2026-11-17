@@ -10,6 +10,7 @@ import com.fishapi.exception.NaoAutenticadoException;
 import com.fishapi.exception.RecursoNaoEncontradoException;
 import com.fishapi.model.ApiKey;
 import com.fishapi.model.PapelAcesso;
+import com.fishapi.model.Plano;
 import com.fishapi.model.Usuario;
 import com.fishapi.repository.UsuarioRepository;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,7 @@ import java.time.temporal.ChronoUnit;
 public class AuthService {
 
     public static final PapelAcesso PAPEL_INICIAL = PapelAcesso.VISITANTE;
+    public static final Plano PLANO_INICIAL = Plano.GRATUITO;
 
     private final UsuarioRepository repository;
     private final ApiKeyService apiKeyService;
@@ -41,7 +43,7 @@ public class AuthService {
     }
 
     public UsuarioResponse cadastrar(CadastroRequest request) {
-        return UsuarioResponse.de(criarUsuario(request.nome(), request.email(), request.senha(), PAPEL_INICIAL));
+        return UsuarioResponse.de(criarUsuario(request.nome(), request.email(), request.senha(), PAPEL_INICIAL, PLANO_INICIAL));
     }
 
     @Transactional(readOnly = true)
@@ -67,13 +69,13 @@ public class AuthService {
     }
 
     /** Usado pelo DataLoader para criar os usuários de demonstração. */
-    public void garantirUsuario(String nome, String email, String senha, PapelAcesso papel) {
+    public void garantirUsuario(String nome, String email, String senha, PapelAcesso papel, Plano plano) {
         if (!repository.existsByEmailIgnoreCase(email)) {
-            criarUsuario(nome, email, senha, papel);
+            criarUsuario(nome, email, senha, papel, plano);
         }
     }
 
-    private Usuario criarUsuario(String nome, String email, String senha, PapelAcesso papel) {
+    private Usuario criarUsuario(String nome, String email, String senha, PapelAcesso papel, Plano plano) {
         String emailNormalizado = email.trim().toLowerCase();
         if (repository.existsByEmailIgnoreCase(emailNormalizado)) {
             throw new ConflitoException("Já existe uma conta com o e-mail '" + emailNormalizado + "'. Faça login.");
@@ -83,7 +85,7 @@ public class AuthService {
         usuario.setNome(nome.trim());
         usuario.setEmail(emailNormalizado);
         usuario.setSenhaHash(Senhas.gerarHash(senha));
-        usuario.setApiKey(apiKeyService.novaChaveDeUsuario(nome.trim(), emailNormalizado, papel));
+        usuario.setApiKey(apiKeyService.novaChaveDeUsuario(nome.trim(), emailNormalizado, papel, plano));
         usuario.setCriadoEm(Instant.now().truncatedTo(ChronoUnit.SECONDS));
         return repository.save(usuario);
     }

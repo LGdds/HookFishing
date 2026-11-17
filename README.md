@@ -5,7 +5,7 @@ API REST em **Java + Spring Boot** para gerenciamento de um aquário: peixes, es
 | Parte | Conteúdo |
 |---|---|
 | **Parte 1** | Spring Boot, Maven, H2, Spring Data JPA, 5 entidades com One-to-One / One-to-Many / Many-to-Many, Bean Validation, enum, CRUD completo, paginação com `Pageable`, consultas personalizadas, códigos HTTP, Swagger e HATEOAS |
-| **Parte 2** | Idempotência (`X-Idempotency-Key`), autenticação por API Key (`X-API-Key`) com papéis da equipe do aquário, rate limiting (429 + `Retry-After`), CORS, versionamento por header (`X-API-Version`) e tratamento global de erros com `@ControllerAdvice` |
+| **Parte 2** | Idempotência (`X-Idempotency-Key`), autenticação por API Key (`X-API-Key`) com papéis da equipe do aquário, rate limiting por plano (429 + `Retry-After` e bloqueio progressivo de quem insiste), planos de assinatura (monetização), CORS, versionamento por header (`X-API-Version`) e tratamento global de erros com `@ControllerAdvice` |
 
 ---
 
@@ -31,6 +31,13 @@ mvnw.cmd spring-boot:run      # Windows
 2. Clique em **Authorize** e entre com **e-mail e senha** (ex.: `admin@hookfishing.com` / `admin123`). Se preferir, informe diretamente uma API Key, como `hf_admin_demo_2025`.
 3. Abra uma seção, clique em **Try it out** e depois em **Execute**: os campos já vêm preenchidos com dados reais da base.
 
+### Rodando com Docker
+
+```bash
+docker build -t hookfishing .
+docker run -p 8080:8080 hookfishing
+```
+
 O Swagger abre no endereço padrão (`/swagger-ui/index.html`; `/swagger-ui.html` redireciona para lá). A página é `src/main/resources/swagger/index.html`, entregue pelo `SwaggerUiFilter` no lugar da página padrão do springdoc. Ela usa os arquivos do Swagger UI do próprio springdoc (com a CDN como reserva) e o tema laranja e azul de `static/css/swagger-tema.css`.
 
 ---
@@ -45,14 +52,17 @@ Página em HTML, CSS e JavaScript puro, sem dependências, em `src/main/resource
 | **Papéis da equipe** | Os botões de cadastrar, editar e excluir aparecem por recurso, conforme as permissões do papel (vindas de `GET /api-keys/me`). Ex.: o CUIDADOR vê "Novo" e "Editar" em Peixes, mas não "Excluir". A aba API Keys só aparece para ADMIN |
 | **CRUD** das 5 entidades | Uma aba por entidade: tabela paginada, ordenação, tamanho da página, busca personalizada e formulário de cadastro/edição com os relacionamentos (selects e checkboxes) |
 | **Idempotência** | Cada formulário de cadastro gera uma `X-Idempotency-Key` (exibida no rodapé). Clicar em Salvar de novo reenvia a mesma chave, e a API não duplica o registro |
-| **Rate limit** | Barra no topo com `X-RateLimit-Remaining / X-RateLimit-Limit`. Ao receber 429, aparece um aviso com contagem regressiva do `Retry-After` |
+| **Rate limit** | Barra no topo com `X-RateLimit-Remaining / X-RateLimit-Limit` e o plano da conta. Ao receber 429, aparece um aviso com contagem regressiva do `Retry-After`; se a chave for bloqueada por insistir, o aviso fica vermelho e mostra o horário de liberação (`X-RateLimit-Blocked-Until`) |
+| **Planos** | Aba com os três planos e preços (`GET /planos`), o consumo atual da chave (`GET /planos/limites`), as regras de bloqueio e o botão de contratar (`PUT /planos/assinatura`, simulação) |
 | **Versionamento** | Botões **v1 / v2** na aba Peixes, que enviam o header `X-API-Version` |
 | **Erros** | Mensagens do `ErroResponse` em avisos, com os campos inválidos destacados no formulário |
 | **API Keys** | Gerar (exibe o valor uma única vez, com botão de copiar), editar papel e status, regenerar e revogar |
-| **Testes da Parte 2** | Tabela de cenários por requisito (4.1 a 5) com requisição, status esperado e resultado (Passou/Falhou), detalhes da resposta e botão "Executar todos" |
+| **Testes da Parte 2** | Tabela de cenários por requisito (4.1 a 5), incluindo planos, estouro do limite e bloqueio, com requisição, status esperado e resultado (Passou/Falhou), detalhes da resposta e botão "Executar todos" |
 | **Painel de requisições** | Lateral com cada chamada feita: método, rota, status e os headers da Parte 2 enviados e recebidos |
 
 **CORS na prática:** o front-end também funciona aberto em outra origem permitida. Por exemplo, abrindo `index.html` pelo Live Server do VS Code (porta 5500), ele chama a API em `http://localhost:8080` e o CORS libera a origem. Em uma porta fora da lista, o navegador bloqueia as chamadas.
+
+**Endereço da API:** servido pela própria API (localhost:8080 ou Render), o front-end usa caminhos relativos. Aberto como arquivo ou num servidor de desenvolvimento (portas 3000, 5173, 5500 e 63342), chama `http://localhost:8080`. Para apontar para outro endereço, defina `window.HOOKFISHING_API = 'https://...'` antes de carregar `js/app.js`.
 
 ---
 
@@ -96,13 +106,13 @@ Regras de negócio:
 
 ```text
 src/main/java/com/fishapi
-├── config/          OpenApiConfig (Swagger), ExemplosOpenApi, WebConfig (CORS + interceptors), DataLoader
-├── controller/      Peixe, Especie, Aquario, Cuidador, Alimentacao, ApiKey + Hateoas (paginação com links)
+├── config/          OpenApiConfig (Swagger), ExemplosOpenApi, WebConfig (CORS + interceptors), FiltroCors, DataLoader
+├── controller/      Peixe, Especie, Aquario, Cuidador, Alimentacao, ApiKey, Auth, Plano + Hateoas (paginação com links)
 ├── dto/             Records de entrada (Request) e saída (Response), com validações e exemplos do Swagger
 ├── exception/       GlobalExceptionHandler (@RestControllerAdvice), ErroResponse e exceções da API
 ├── idempotencia/    IdempotenciaService (X-Idempotency-Key)
-├── model/           Entidades JPA + enums TipoAlimentacao e NivelAcesso
-├── ratelimit/       RateLimiter e RateLimitInterceptor
+├── model/           Entidades JPA + enums TipoAlimentacao, PapelAcesso e Plano
+├── ratelimit/       RateLimiter (token bucket por plano + bloqueio) e RateLimitInterceptor
 ├── repository/      Repositórios Spring Data JPA com as consultas personalizadas
 ├── seguranca/       ApiKeyService e ApiKeyInterceptor (X-API-Key)
 ├── service/         Regras de negócio de cada entidade
@@ -131,6 +141,14 @@ Autenticação (rotas públicas):
 |---|---|---|
 | POST | `/auth/cadastro` | Cria uma conta (papel `VISITANTE`). Exige `X-Idempotency-Key` |
 | POST | `/auth/login` | Entra com e-mail e senha e recebe a API Key do usuário |
+
+Planos e limites:
+
+| Método | Rota | Descrição |
+|---|---|---|
+| GET | `/planos` | Tabela de planos e preços (pública) |
+| GET | `/planos/limites` | Plano da chave, fichas restantes e regras de bloqueio |
+| PUT | `/planos/assinatura` | Troca o plano da chave em uso (simulação, sem cobrança) |
 
 Gerenciamento de API Keys (apenas ADMIN, exceto `/me`):
 
@@ -202,31 +220,78 @@ Todo **POST de cadastro** (inclusive `POST /auth/cadastro`) exige o header `X-Id
 - Chave ausente, inválida ou desativada → **401** (com o header `WWW-Authenticate`).
 - Papel sem permissão → **403**, com uma mensagem que diz quais papéis podem. Exemplo: *"Seu papel CUIDADOR não permite excluir peixes. Papéis permitidos: BIOLOGO, GERENTE ou ADMIN."*
 
-### 4.3 Rate limiting
+### 4.3 Rate limiting, planos e bloqueio
 
-- Algoritmo **Token Bucket**, por cliente (a API Key ou, sem chave, o IP). Cada cliente tem um balde com **60 fichas**; cada requisição consome uma, e o balde é reabastecido com **1 ficha por segundo** até ficar cheio de novo.
-- Na prática: rajadas de até 60 requisições seguidas e, em média, 60 por minuto. Os valores ficam no `application.properties`.
-- Implementação em `ratelimit/RateLimiter.java`. Ela usa `ConcurrentHashMap.compute`, para que duas requisições simultâneas não consumam a mesma ficha.
-- Toda resposta traz `X-RateLimit-Limit`, `X-RateLimit-Remaining` e `X-RateLimit-Reset`.
-- Ao exceder o limite → **429 Too Many Requests** com o header `Retry-After`, que indica os segundos até poder tentar de novo.
+#### Planos (como a API ganha dinheiro)
 
-Para demonstrar, reduza a capacidade para 5 em `hookfishing.rate-limit.capacidade` e faça 6 requisições seguidas:
+Modelo **freemium**: toda conta nova começa no plano `GRATUITO`, suficiente para estudar e testar. Quem precisa de mais volume contrata um plano pago, que aumenta o limite de requisições da API Key. A cobrança é por assinatura mensal, por chave.
+
+| Plano | Preço | Requisições de uma vez | Recarga | Para quem |
+|---|---|---|---|---|
+| Sem chave (por IP, rotas públicas) | – | 10 | 20 por minuto | Login, cadastro e tabela de planos |
+| `GRATUITO` | Grátis | 20 | 30 por minuto (1 a cada 2 s) | Estudar e testar |
+| `BASICO` | R$ 29,90/mês | 60 | 120 por minuto (2 por segundo) | Aquários pequenos, poucos usuários |
+| `PROFISSIONAL` | R$ 99,90/mês | 200 | 600 por minuto (10 por segundo) | Redes de aquários e integrações |
+
+- O plano fica na própria API Key (`model/Plano.java` e coluna `plano` em `api_key`). O ADMIN altera em `PUT /api-keys/{id}`; o próprio usuário troca em `PUT /planos/assinatura`.
+- A contratação é uma **simulação acadêmica**: não há cobrança. Em produção, essa etapa passaria por um meio de pagamento (ex.: um checkout com webhook que confirma o pagamento e só então troca o plano).
+- Chaves de demonstração: `hf_admin_demo_2025` é PROFISSIONAL; gerente e biólogo, BASICO; cuidador e visitante, GRATUITO.
+
+#### Token bucket
+
+- Cada cliente tem um **balde de fichas** do tamanho do seu plano. Cada requisição consome uma ficha, e o balde é reabastecido aos poucos (recarga por minuto). Dá para fazer uma rajada até o tamanho do balde; depois, só no ritmo da recarga.
+- Com API Key, o balde é da chave. Sem chave, é do IP (atrás do proxy do Render, o IP real vem do `X-Forwarded-For`).
+- Há também um **limite global** da API inteira (1000 de uma vez, 3000 por minuto), que a protege quando muitos clientes chegam juntos.
+- Toda resposta traz `X-RateLimit-Limit` (capacidade), `X-RateLimit-Remaining` (fichas restantes), `X-RateLimit-Reset` (segundos até o balde encher) e `X-RateLimit-Policy` (ex.: `GRATUITO;capacidade=20;recarga=30/min`).
+
+#### O que acontece quando o limite estoura
+
+| Situação | Resposta | Quanto esperar |
+|---|---|---|
+| Balde vazio | **429** com `Retry-After` e a mensagem *"Próxima requisição liberada em 2 segundo(s). Atenção: mais 4 tentativa(s) antes disso bloqueiam o acesso por 60 segundos."* | O tempo até a próxima ficha (no Gratuito, 2 s) |
+| Insistiu: 5 requisições recusadas seguidas | **429** com `Retry-After: 60` e `X-RateLimit-Blocked-Until` (horário de liberação, UTC). O bloqueio vale mesmo que o balde recarregue | **60 segundos** |
+| Novo bloqueio em menos de 10 minutos | O tempo **dobra**: 120 s, 240 s, 480 s... | Até no máximo **15 minutos** |
+| Esperou o `Retry-After` e a requisição passou | A contagem de tentativas volta a zero | – |
+
+- `GET /planos/limites` mostra o plano, as fichas restantes e essas regras para a chave em uso.
+- Implementação em `ratelimit/RateLimiter.java` (baldes e penalidade, com métodos `synchronized` para que duas requisições simultâneas não usem a mesma ficha) e `ratelimit/RateLimitInterceptor.java` (identifica o cliente, escreve os headers e lança o 429).
+- Os baldes ficam em memória: zeram ao reiniciar e não são compartilhados entre várias instâncias. Numa produção distribuída, o estado iria para um Redis.
+
+Para ver o 429 e depois o bloqueio com a chave do visitante (plano Gratuito, 20 de uma vez):
 
 ```bash
-for i in $(seq 1 6); do curl -s -o /dev/null -w "%{http_code}\n" -H "X-API-Key: hf_visitante_demo_2025" http://localhost:8080/peixes; done
+for i in $(seq 1 30); do
+  curl -s -o /dev/null -w "%{http_code} retry=%header{retry-after} bloqueio=%header{x-ratelimit-blocked-until}\n" \
+    -H "X-API-Key: hf_visitante_demo_2025" http://localhost:8080/especies
+done
 ```
+
+As 20 primeiras respondem 200; as 4 seguintes, 429 com `Retry-After` curto; a partir da 25ª, 429 com `X-RateLimit-Blocked-Until` (bloqueio de 60 s).
 
 ### 4.4 CORS
 
 Configurado em `WebConfig` a partir da propriedade `hookfishing.cors.origens-permitidas`. Origens padrão:
 
 ```text
-http://localhost:3000, http://localhost:5173, http://localhost:5500, http://127.0.0.1:5500, http://localhost:8080
+http://localhost:3000, http://localhost:5173, http://localhost:5500, http://127.0.0.1:5500, http://localhost:8080, http://localhost:63342
 ```
 
+- O CORS é um `CorsFilter` com a maior prioridade: ele responde o preflight (`OPTIONS`) antes do rate limit e da autenticação, e também acrescenta os headers CORS nas respostas de erro (401, 403, 429).
 - Métodos permitidos: `GET`, `POST`, `PUT`, `DELETE` e `OPTIONS`.
-- Headers aceitos: `Content-Type`, `Accept`, `X-API-Key`, `X-API-Version` e `X-Idempotency-Key`.
-- Headers expostos ao JavaScript: `Location`, `Retry-After`, `X-RateLimit-*`, `X-API-Version`, `X-Idempotency-Key` e `X-Idempotent-Replayed`.
+- Headers aceitos: `Content-Type`, `Accept`, `Authorization`, `X-API-Key`, `X-API-Version` e `X-Idempotency-Key`.
+- Headers expostos ao JavaScript: `Location`, `Retry-After`, `X-RateLimit-*` (incluindo `Policy` e `Blocked-Until`), `X-API-Version`, `X-Idempotency-Key` e `X-Idempotent-Replayed`.
+- Em produção, a lista vem da variável de ambiente `HOOKFISHING_CORS_ORIGINS`, e a URL pública do serviço no Render (`RENDER_EXTERNAL_URL`) entra automaticamente (veja o deploy abaixo).
+
+Testando o preflight:
+
+```bash
+curl -i -X OPTIONS http://localhost:8080/peixes \
+  -H "Origin: http://localhost:5500" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: X-API-Key, X-Idempotency-Key, Content-Type"
+# 200 com Access-Control-Allow-Origin: http://localhost:5500
+# Com Origin: http://evil.com -> 403 "Invalid CORS request"
+```
 
 ### 4.5 Versionamento — `X-API-Version`
 
@@ -274,7 +339,7 @@ curl -H "X-API-Key: hf_visitante_demo_2025" -H "X-API-Version: 2" http://localho
 | 409 | Duplicidade, recurso ainda vinculado, chave de idempotência em processamento |
 | 415 | `Content-Type` diferente de `application/json` |
 | 422 | Chave de idempotência reutilizada com outro corpo |
-| 429 | Limite de requisições excedido |
+| 429 | Limite do plano excedido ou chave bloqueada por insistir (com `Retry-After` e, no bloqueio, `X-RateLimit-Blocked-Until`) |
 | 500 | Erro inesperado |
 
 ### 6. Documentação
@@ -292,10 +357,38 @@ O Swagger (tema laranja e azul, com seletor entre v1 e v2) tem uma descrição g
 | Propriedade | Padrão | Uso |
 |---|---|---|
 | `hookfishing.api-keys.admin` / `.gerente` / `.biologo` / `.cuidador` / `.visitante` | `hf_*_demo_2025` | Chaves de demonstração criadas ao iniciar (uma por papel) |
-| `hookfishing.rate-limit.capacidade` | `60` | Fichas do balde (rajada máxima de requisições) |
-| `hookfishing.rate-limit.recarga-por-segundo` | `1` | Fichas devolvidas ao balde por segundo |
+| `hookfishing.rate-limit.anonimo.capacidade` / `.recarga-por-minuto` | `10` / `20` | Limite por IP para quem chama sem chave (os limites com chave vêm do plano) |
+| `hookfishing.rate-limit.global.capacidade` / `.recarga-por-minuto` | `1000` / `3000` | Limite da API inteira |
+| `hookfishing.rate-limit.penalidade.tentativas` | `5` | Requisições recusadas seguidas que disparam o bloqueio |
+| `hookfishing.rate-limit.penalidade.segundos` | `60` | Duração do primeiro bloqueio |
+| `hookfishing.rate-limit.penalidade.maximo-segundos` | `900` | Bloqueio máximo (15 min) |
+| `hookfishing.rate-limit.penalidade.janela-reincidencia-segundos` | `600` | Bloqueio nesse intervalo conta como reincidência e dobra o tempo |
 | `hookfishing.idempotencia.validade-horas` | `24` | Validade das chaves de idempotência |
-| `hookfishing.cors.origens-permitidas` | ver acima | Origens liberadas no CORS |
+| `hookfishing.cors.origens-permitidas` | ver acima (variável `HOOKFISHING_CORS_ORIGINS`) | Origens liberadas no CORS |
+| `server.port` | `8080` (variável `PORT`) | Porta HTTP |
+
+---
+
+## ☁️ Deploy no Render
+
+O projeto já vem com `Dockerfile` e `render.yaml`.
+
+1. Suba o código para o GitHub.
+2. No Render, clique em **New > Blueprint** e escolha o repositório (ele lê o `render.yaml`). Ou crie um **Web Service** com *Runtime: Docker*.
+3. CORS: a URL pública do serviço é liberada sozinha (o Render define a variável `RENDER_EXTERNAL_URL`, lida em `hookfishing.cors.url-publica`). Se o front-end for rodar em outro endereço (outro site, Live Server), acrescente-o em `HOOKFISHING_CORS_ORIGINS` (lista separada por vírgula, sem barra no final).
+4. Opcional: troque as chaves de demonstração com `HOOKFISHING_ADMIN_KEY`, `HOOKFISHING_GERENTE_KEY` etc.
+5. Depois do deploy: front-end em `https://SEU-SERVICO.onrender.com/`, Swagger em `/swagger-ui/index.html`.
+
+Detalhes:
+
+- O Render informa a porta na variável `PORT`; a aplicação lê com `server.port=${PORT:8080}`.
+- `server.forward-headers-strategy=framework` faz a API respeitar os headers `X-Forwarded-*` do proxy do Render: os links HATEOAS e o Swagger saem com `https://` e o rate limit enxerga o IP real.
+- O health check usa `/` (a página do front-end), que não passa pelo rate limit.
+- No plano gratuito do Render, o serviço hiberna depois de um tempo sem acesso: a primeira requisição depois disso demora até cerca de um minuto. O banco H2 é em memória, então os dados voltam ao inicial a cada reinício.
+- Front-end e Swagger no mesmo serviço da API = mesma origem. O navegador ainda manda o header `Origin` em POST e PUT, e atrás do proxy do Render o Spring enxerga a requisição como `http://host-interno:10000`; o `CorsFilter` padrão achava que era outra origem e respondia **403 "Invalid CORS request"**. O `FiltroCors` (em `config/`) compara a origem com o host que o navegador usou (`X-Forwarded-Host` ou `Host`) e deixa passar as requisições da mesma origem.
+- O Swagger anuncia o servidor como `/` (relativo), então o *Try it out* sempre chama o mesmo endereço da página, em `https`. Antes, ele podia chamar `http://...` e o navegador bloqueava ("Failed to fetch... CORS").
+- Logo após o serviço acordar, o Render pode responder 502 sem headers de CORS, e o navegador mostra isso como erro de CORS. Espere a primeira carga terminar e tente de novo.
+- O CORS só precisa de configuração quando o front-end roda em outro endereço (Live Server, Vite ou outro site); essa origem precisa estar em `HOOKFISHING_CORS_ORIGINS`.
 
 ---
 

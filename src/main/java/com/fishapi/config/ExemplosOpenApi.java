@@ -389,7 +389,7 @@ public final class ExemplosOpenApi {
               "timestamp": "2026-11-12T22:30:00Z",
               "status": 429,
               "erro": "Too Many Requests",
-              "mensagem": "Limite de requisições excedido: o balde de 60 requisições está vazio e é reabastecido com 1 requisição(ões) por segundo. Tente novamente em 1 segundo(s).",
+              "mensagem": "Limite do plano GRATUITO excedido: 20 requisições de uma vez e recarga de 30 por minuto (1 a cada 2 segundos). Próxima requisição liberada em 2 segundo(s). Atenção: mais 4 tentativa(s) antes disso bloqueiam o acesso por 60 segundos. Para limites maiores, veja os planos em GET /planos.",
               "caminho": "/peixes",
               "campos": []
             }""";

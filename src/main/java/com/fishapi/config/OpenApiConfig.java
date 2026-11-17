@@ -21,6 +21,7 @@ import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.OAuthFlow;
 import io.swagger.v3.oas.models.security.OAuthFlows;
 import io.swagger.v3.oas.models.security.Scopes;
+import io.swagger.v3.oas.models.servers.Server;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import com.fishapi.model.PapelAcesso;
 import com.fishapi.seguranca.Permissoes;
@@ -70,7 +71,7 @@ public class OpenApiConfig {
 
             - Clique em **Authorize** e entre com **e-mail e senha** (ex.: `admin@hookfishing.com` / `admin123`), \
             ou informe diretamente uma API Key no header `X-API-Key`.
-            - Todas as rotas exigem a chave, exceto `/auth/cadastro` e `/auth/login`.
+            - Todas as rotas exigem a chave, exceto `/auth/cadastro`, `/auth/login` e `GET /planos`.
             - Não tem conta? Crie em `POST /auth/cadastro` e entre em `POST /auth/login`, que devolve a sua API Key. \
             Contas novas começam como `VISITANTE`; um `ADMIN` altera o papel em `PUT /api-keys/{id}`.
 
@@ -92,18 +93,38 @@ public class OpenApiConfig {
             - Repetir a mesma chave com o mesmo corpo devolve o registro já criado, sem duplicar \
             (`X-Idempotent-Replayed: true`). Mesma chave com outro corpo: **422**. As chaves valem por 24 horas.
 
-            **Rate limit (token bucket)**
+            **Planos e monetização**
 
-            Cada cliente (API Key ou, sem chave, o IP) tem um *balde* de fichas: cada requisição gasta 1 ficha e o \
-            balde é reabastecido aos poucos.
+            A API segue o modelo **freemium**: todo cadastro começa no plano `GRATUITO` e pode migrar para um plano \
+            pago com limites maiores em `PUT /planos/assinatura` (simulação acadêmica, sem cobrança real). \
+            A tabela de planos fica em `GET /planos` (pública).
 
-            | Capacidade (de uma vez) | Recarga |
-            |---|---|
-            | 60 requisições | 1 por segundo (60 por minuto) |
+            | Plano | Preço | Requisições de uma vez | Recarga |
+            |---|---|---|---|
+            | Sem chave (por IP) | – | 10 | 20 por minuto (1 a cada 3 s) |
+            | `GRATUITO` | Grátis | 20 | 30 por minuto (1 a cada 2 s) |
+            | `BASICO` | R$ 29,90/mês | 60 | 120 por minuto (2 por segundo) |
+            | `PROFISSIONAL` | R$ 99,90/mês | 200 | 600 por minuto (10 por segundo) |
 
-            - Toda resposta traz `X-RateLimit-Limit` (capacidade), `X-RateLimit-Remaining` (fichas restantes) e \
-            `X-RateLimit-Reset` (segundos até o balde encher).
-            - Balde vazio: **429 Too Many Requests** com `Retry-After` (segundos até a próxima ficha).
+            Chaves de demonstração: `hf_admin_demo_2025` é PROFISSIONAL; gerente e biólogo são BASICO; \
+            cuidador e visitante são GRATUITO.
+
+            **Rate limit (token bucket) e bloqueio**
+
+            Cada cliente tem um *balde* de fichas do tamanho do seu plano: cada requisição gasta 1 ficha e o balde é \
+            reabastecido aos poucos. Dá para fazer uma rajada até o tamanho do balde; depois, só no ritmo da recarga.
+
+            - Balde vazio: **429 Too Many Requests**, com `Retry-After` (segundos até a próxima ficha) e uma mensagem \
+            dizendo quanto esperar e quantas tentativas faltam para o bloqueio.
+            - **Bloqueio por insistência:** 5 requisições seguidas recusadas bloqueiam o cliente por **60 segundos**, \
+            mesmo que o balde recarregue nesse meio-tempo. Um novo bloqueio em menos de 10 minutos **dobra** o tempo \
+            (120 s, 240 s, 480 s...), até no máximo **15 minutos**. Durante o bloqueio, o 429 traz \
+            `X-RateLimit-Blocked-Until` (horário de liberação, UTC) e o `Retry-After` com o tempo restante.
+            - Esperar o `Retry-After` antes de tentar de novo zera a contagem de tentativas.
+            - Limite global: a API inteira aceita até 1000 requisições de uma vez e 3000 por minuto.
+            - Toda resposta traz `X-RateLimit-Limit` (capacidade), `X-RateLimit-Remaining` (fichas restantes), \
+            `X-RateLimit-Reset` (segundos até o balde encher) e `X-RateLimit-Policy` (plano e recarga).
+            - `GET /planos/limites` mostra o seu plano, as fichas restantes e as regras de bloqueio.
 
             **Versionamento (X-API-Version)**
 
@@ -111,10 +132,14 @@ public class OpenApiConfig {
             (relacionamentos detalhados e campos calculados).
             - Troque a versão em **Select a definition**, no topo da página: em cada versão o header já vem preenchido.
 
-            **CORS**
+            **CORS e deploy (Render)**
 
-            - Origens permitidas no navegador: `localhost:3000`, `localhost:5173`, `localhost:5500`, \
-            `127.0.0.1:5500` e `localhost:8080`. Métodos: GET, POST, PUT, DELETE e OPTIONS.
+            - Só as origens configuradas podem chamar a API pelo navegador (padrão: `localhost:3000`, `localhost:5173`, \
+            `localhost:5500`, `127.0.0.1:5500` e `localhost:8080`). Métodos: GET, POST, PUT, DELETE e OPTIONS.
+            - Headers liberados: `X-API-Key`, `Authorization`, `X-API-Version`, `X-Idempotency-Key`. O navegador \
+            também consegue ler `Retry-After`, `X-RateLimit-*` e `Location` das respostas.
+            - No Render, a URL pública do serviço é liberada automaticamente (variável `RENDER_EXTERNAL_URL`); \
+            outras origens entram na variável `HOOKFISHING_CORS_ORIGINS`. A porta vem da variável `PORT`.
 
             **Dados de demonstração**
 
@@ -137,6 +162,10 @@ public class OpenApiConfig {
     @Bean
     public OpenAPI hookFishingOpenAPI() {
         return new OpenAPI()
+                // Endereço relativo: o "Try it out" chama sempre o mesmo endereço da página do Swagger.
+                // Sem isso, atrás do proxy HTTPS do Render o springdoc podia anunciar http://..., e o navegador
+                // bloqueava a chamada ("Failed to fetch ... CORS").
+                .servers(List.of(new Server().url("/").description("Mesmo endereço desta página")))
                 .info(new Info()
                         .title("HookFishing API")
                         .version("2.0.0")
@@ -262,7 +291,7 @@ public class OpenApiConfig {
             }
             openApi.getPaths().forEach((caminho, item) -> item.readOperationsMap().forEach((metodo, operacao) -> {
                 ApiResponses respostas = operacao.getResponses() == null ? new ApiResponses() : operacao.getResponses();
-                if (caminho.startsWith("/auth")) {
+                if (caminho.startsWith("/auth") || (caminho.equals("/planos") && metodo == PathItem.HttpMethod.GET)) {
                     // Rotas públicas: sem X-API-Key, mas com rate limiting
                     operacao.setSecurity(new ArrayList<>());
                     String descricaoPublica = operacao.getDescription() == null ? "" : operacao.getDescription();
@@ -270,7 +299,7 @@ public class OpenApiConfig {
                         operacao.setDescription(descricaoPublica + "\n\n**Acesso:** público (não exige `X-API-Key`).");
                     }
                     adicionar(respostas, "429",
-                            "Limite de requisições excedido (token bucket de 60 fichas por IP, recarga de 1 por segundo). Veja o header Retry-After",
+                            "Limite excedido: sem chave, 10 requisições de uma vez por IP e recarga de 20 por minuto. Insistir 5 vezes bloqueia por 60 s (veja Retry-After e X-RateLimit-Blocked-Until)",
                             ExemplosOpenApi.ERRO_429, true);
                     adicionar(respostas, "500", "Erro interno inesperado", ExemplosOpenApi.ERRO_500, false);
                     ordenar(operacao, respostas);
@@ -316,16 +345,19 @@ public class OpenApiConfig {
                             ExemplosOpenApi.ERRO_415, false);
                 }
                 adicionar(respostas, "429",
-                        "Limite de requisições excedido (token bucket de 60 fichas, recarga de 1 por segundo). Veja o header Retry-After",
+                        "Limite do plano excedido (token bucket). Insistir 5 vezes seguidas bloqueia por 60 s, dobrando a cada reincidência até 15 min. Veja Retry-After, X-RateLimit-Blocked-Until e GET /planos/limites",
                         ExemplosOpenApi.ERRO_429, true);
                 adicionar(respostas, "500", "Erro interno inesperado", ExemplosOpenApi.ERRO_500, false);
 
                 respostas.forEach((codigo, resposta) -> {
                     if (codigo.startsWith("2")) {
                         resposta.addHeaderObject("X-RateLimit-Limit",
-                                cabecalho("Capacidade do balde (token bucket)", 60));
+                                cabecalho("Capacidade do balde (token bucket) do plano", 200));
                         resposta.addHeaderObject("X-RateLimit-Remaining",
-                                cabecalho("Fichas (requisições) restantes no balde", 59));
+                                cabecalho("Fichas (requisições) restantes no balde", 199));
+                        resposta.addHeaderObject("X-RateLimit-Policy",
+                                new Header().description("Plano e regra aplicados à chave")
+                                        .schema(new StringSchema().example("PROFISSIONAL;capacidade=200;recarga=600/min")));
                         resposta.addHeaderObject("X-RateLimit-Reset",
                                 cabecalho("Segundos até o balde ficar cheio de novo", 1));
                         resposta.addHeaderObject("X-API-Version",
@@ -360,7 +392,13 @@ public class OpenApiConfig {
 
         if (comRetryAfter) {
             resposta.addHeaderObject("Retry-After",
-                    cabecalho("Segundos que o cliente deve aguardar antes de tentar novamente", 42));
+                    cabecalho("Segundos que o cliente deve aguardar antes de tentar novamente", 2));
+            resposta.addHeaderObject("X-RateLimit-Blocked-Until",
+                    new Header().description("Só quando o cliente foi bloqueado por insistir: horário (UTC) em que o acesso volta")
+                            .schema(new StringSchema().example("2026-11-12T22:31:00Z")));
+            resposta.addHeaderObject("X-RateLimit-Policy",
+                    new Header().description("Plano e regra aplicados")
+                            .schema(new StringSchema().example("GRATUITO;capacidade=20;recarga=30/min")));
         }
         respostas.addApiResponse(codigo, resposta);
     }

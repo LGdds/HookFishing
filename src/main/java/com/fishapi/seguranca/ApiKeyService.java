@@ -8,6 +8,7 @@ import com.fishapi.exception.NaoAutenticadoException;
 import com.fishapi.exception.RecursoNaoEncontradoException;
 import com.fishapi.model.ApiKey;
 import com.fishapi.model.PapelAcesso;
+import com.fishapi.model.Plano;
 import com.fishapi.repository.ApiKeyRepository;
 import com.fishapi.repository.UsuarioRepository;
 import com.fishapi.service.Paginacao;
@@ -20,6 +21,7 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -39,6 +41,23 @@ public class ApiKeyService {
         this.usuarioRepository = usuarioRepository;
     }
 
+    /**
+     * Versão que não lança exceção, usada pelo rate limit para descobrir o plano da chave.
+     * Devolve vazio se a chave não existir ou estiver desativada.
+     */
+    @Transactional
+    public Optional<ClienteAutenticado> tentarAutenticar(String chave) {
+        if (chave == null || chave.isBlank()) {
+            return Optional.empty();
+        }
+        return repository.findByHashChave(Hashes.sha256(chave.trim()))
+                .filter(ApiKey::isAtiva)
+                .map(apiKey -> {
+                    apiKey.setUltimoUsoEm(Instant.now().truncatedTo(ChronoUnit.SECONDS));
+                    return paraCliente(apiKey);
+                });
+    }
+
     /** Valida a chave recebida no header X-API-Key. */
     @Transactional
     public ClienteAutenticado autenticar(String chave) {
@@ -49,7 +68,19 @@ public class ApiKeyService {
             throw new NaoAutenticadoException("Esta API Key foi desativada. Solicite uma nova chave ao administrador.");
         }
         apiKey.setUltimoUsoEm(Instant.now().truncatedTo(ChronoUnit.SECONDS));
-        return new ClienteAutenticado(apiKey.getId(), apiKey.getNome(), apiKey.getPapel());
+        return paraCliente(apiKey);
+    }
+
+    private static ClienteAutenticado paraCliente(ApiKey apiKey) {
+        return new ClienteAutenticado(apiKey.getId(), apiKey.getNome(), apiKey.getPapel(), apiKey.getPlano());
+    }
+
+    /** Troca o plano da chave usada na requisição (simulação de contratação, sem cobrança real). */
+    @Transactional
+    public ApiKeyResponse alterarPlanoDaChaveAtual(Plano plano) {
+        ApiKey apiKey = buscarEntidade(ContextoRequisicao.clienteAtual().apiKeyId());
+        apiKey.setPlano(plano);
+        return ApiKeyResponse.de(repository.save(apiKey));
     }
 
     public Page<ApiKeyResponse> listar(Pageable pageable) {
@@ -68,6 +99,7 @@ public class ApiKeyService {
         apiKey.setNome(request.nome().trim());
         apiKey.setEmail(request.email().trim().toLowerCase());
         apiKey.setPapel(request.papel());
+        apiKey.setPlano(request.plano() == null ? Plano.GRATUITO : request.plano());
         aplicarChave(apiKey, chave);
         apiKey.setAtiva(true);
         apiKey.setCriadaEm(Instant.now().truncatedTo(ChronoUnit.SECONDS));
@@ -85,6 +117,9 @@ public class ApiKeyService {
         apiKey.setNome(request.nome().trim());
         apiKey.setEmail(request.email().trim().toLowerCase());
         apiKey.setPapel(request.papel());
+        if (request.plano() != null) {
+            apiKey.setPlano(request.plano());
+        }
         apiKey.setAtiva(request.ativa());
         return ApiKeyResponse.de(repository.save(apiKey));
     }
@@ -117,7 +152,7 @@ public class ApiKeyService {
 
     /** Cria uma chave com valor fixo (usada para as chaves de demonstração carregadas na inicialização). */
     @Transactional
-    public void garantirChave(String nome, String email, PapelAcesso papel, String chave) {
+    public void garantirChave(String nome, String email, PapelAcesso papel, Plano plano, String chave) {
         if (chave == null || chave.isBlank() || repository.existsByHashChave(Hashes.sha256(chave.trim()))) {
             return;
         }
@@ -125,6 +160,7 @@ public class ApiKeyService {
         apiKey.setNome(nome);
         apiKey.setEmail(email);
         apiKey.setPapel(papel);
+        apiKey.setPlano(plano);
         aplicarChave(apiKey, chave.trim());
         apiKey.setAtiva(true);
         apiKey.setCriadaEm(Instant.now().truncatedTo(ChronoUnit.SECONDS));
@@ -133,11 +169,12 @@ public class ApiKeyService {
 
     /** Cria a API Key de um usuário recém-cadastrado (o valor é emitido apenas no login). */
     @Transactional
-    public ApiKey novaChaveDeUsuario(String nome, String email, PapelAcesso papel) {
+    public ApiKey novaChaveDeUsuario(String nome, String email, PapelAcesso papel, Plano plano) {
         ApiKey apiKey = new ApiKey();
         apiKey.setNome(nome);
         apiKey.setEmail(email);
         apiKey.setPapel(papel);
+        apiKey.setPlano(plano);
         aplicarChave(apiKey, gerarChave());
         apiKey.setAtiva(true);
         apiKey.setCriadaEm(Instant.now().truncatedTo(ChronoUnit.SECONDS));

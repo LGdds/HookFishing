@@ -26,6 +26,11 @@ public class ApiKey {
     @Column(nullable = false, length = 20)
     private PapelAcesso papel;
 
+    /** Plano de assinatura: define o limite de requisições (token bucket) da chave. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private Plano plano = Plano.GRATUITO;
+
     @Column(name = "hash_chave", nullable = false, unique = true, length = 64)
     private String hashChave;
 
@@ -73,6 +78,14 @@ public class ApiKey {
 
     public void setPapel(PapelAcesso papel) {
         this.papel = papel;
+    }
+
+    public Plano getPlano() {
+        return plano;
+    }
+
+    public void setPlano(Plano plano) {
+        this.plano = plano;
     }
 
     public String getHashChave() {

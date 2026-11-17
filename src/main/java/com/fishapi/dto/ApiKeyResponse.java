@@ -2,6 +2,7 @@ package com.fishapi.dto;
 
 import com.fishapi.model.ApiKey;
 import com.fishapi.model.PapelAcesso;
+import com.fishapi.model.Plano;
 import com.fishapi.seguranca.Permissoes;
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.springframework.hateoas.server.core.Relation;
@@ -20,6 +21,7 @@ public record ApiKeyResponse(
         @Schema(description = "Dono da chave", example = "Equipe de Cuidadores") String nome,
         @Schema(description = "E-mail do responsável", example = "cuidador@hookfishing.com") String email,
         @Schema(description = "Papel de acesso", example = "CUIDADOR") PapelAcesso papel,
+        @Schema(description = "Plano de assinatura (define o limite de requisições)", example = "GRATUITO") Plano plano,
         @Schema(description = "O que o papel permite fazer em cada recurso",
                 example = "{\"peixes\": [\"CONSULTAR\", \"CADASTRAR\", \"EDITAR\"], \"alimentacoes\": [\"CONSULTAR\", \"CADASTRAR\", \"EDITAR\"], "
                         + "\"especies\": [\"CONSULTAR\"], \"aquarios\": [\"CONSULTAR\"], \"cuidadores\": [\"CONSULTAR\"], \"api-keys\": []}")
@@ -35,7 +37,7 @@ public record ApiKeyResponse(
 
     /** Cópia desta resposta com outra observação (a chave completa nunca é repetida). */
     public ApiKeyResponse comAviso(String novoAviso) {
-        return new ApiKeyResponse(id, nome, email, papel, permissoes, prefixo, ativa, criadaEm, ultimoUsoEm, null, novoAviso);
+        return new ApiKeyResponse(id, nome, email, papel, plano, permissoes, prefixo, ativa, criadaEm, ultimoUsoEm, null, novoAviso);
     }
 
     public static ApiKeyResponse de(ApiKey k) {
@@ -48,6 +50,7 @@ public record ApiKeyResponse(
                 k.getNome(),
                 k.getEmail(),
                 k.getPapel(),
+                k.getPlano(),
                 Permissoes.mapaDe(k.getPapel()),
                 k.getPrefixo(),
                 k.isAtiva(),

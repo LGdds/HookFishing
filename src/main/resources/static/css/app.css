@@ -310,3 +310,39 @@ code { font-family: var(--mono); font-size: .9em; background: var(--superficie-2
     .painel__cabecalho { flex-direction: column; }
     .limite__barra { width: 70px; }
 }
+
+/* ===================== Planos e consumo ===================== */
+.selo-plano { background: #fff4e6; color: #a34d00; }
+.selo-plano--BASICO { background: #e3f3f4; color: var(--agua); }
+.selo-plano--PROFISSIONAL { background: var(--oceano); color: #fff; }
+
+.aviso-429--bloqueio { background: var(--erro-claro); color: var(--erro); border-bottom-color: #f3c3c3; }
+.aviso-429__detalhe { display: block; font-weight: 400; margin-top: 2px; }
+
+.planos { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.plano {
+    background: var(--superficie);
+    border: 1px solid var(--borda);
+    border-radius: var(--raio);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.plano--atual { border-color: var(--agua); box-shadow: 0 0 0 2px var(--agua-claro); }
+.plano header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.plano h2 { margin: 0; font-size: 18px; }
+.plano__marca { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--agua); }
+.plano__preco { margin: 0; font-size: 22px; font-weight: 700; color: var(--oceano); }
+.plano__descricao { margin: 0; color: var(--texto-2); flex: 1; }
+.plano__limites { margin: 4px 0 8px; display: grid; gap: 4px; }
+.plano__limites div { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid var(--borda); padding-top: 6px; }
+.plano__limites dt { color: var(--texto-2); }
+.plano__limites dd { margin: 0; font-weight: 600; text-align: right; }
+
+.consumo { background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); padding: 18px; }
+.consumo h2 { margin: 0 0 10px; font-size: 18px; }
+.consumo h3 { margin: 18px 0 8px; font-size: 15px; }
+.consumo__barra { height: 10px; background: var(--superficie-2); border: 1px solid var(--borda); border-radius: 99px; overflow: hidden; max-width: 420px; }
+.consumo__barra div { height: 100%; background: var(--agua); }
+.consumo__etapas { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 80ch; }

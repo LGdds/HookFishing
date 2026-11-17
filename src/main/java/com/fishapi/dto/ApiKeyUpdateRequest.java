@@ -1,6 +1,7 @@
 package com.fishapi.dto;
 
 import com.fishapi.model.PapelAcesso;
+import com.fishapi.model.Plano;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -26,6 +27,10 @@ public record ApiKeyUpdateRequest(
                 requiredMode = Schema.RequiredMode.REQUIRED)
         @NotNull(message = "O papel é obrigatório (VISITANTE, CUIDADOR, BIOLOGO, GERENTE ou ADMIN)")
         PapelAcesso papel,
+
+        @Schema(description = "Plano de assinatura. Opcional: se omitido, o plano atual é mantido.",
+                example = "BASICO", allowableValues = {"GRATUITO", "BASICO", "PROFISSIONAL"})
+        Plano plano,
 
         @Schema(description = "false desativa a chave (requisições com ela passam a receber 401)", example = "true",
                 requiredMode = Schema.RequiredMode.REQUIRED)

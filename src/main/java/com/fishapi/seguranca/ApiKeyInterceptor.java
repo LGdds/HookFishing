@@ -37,6 +37,12 @@ public class ApiKeyInterceptor implements HandlerInterceptor {
             return true; // preflight do CORS não envia a chave
         }
 
+        // O RateLimitInterceptor (que roda antes) já identificou a chave para descobrir o plano
+        if (request.getAttribute(ContextoRequisicao.ATRIBUTO_CLIENTE) instanceof ClienteAutenticado jaIdentificado) {
+            verificarPermissao(jaIdentificado, request);
+            return true;
+        }
+
         String chave = extrairChave(request);
         if (chave == null || chave.isBlank()) {
             throw new NaoAutenticadoException("API Key não informada. Envie o header X-API-Key "

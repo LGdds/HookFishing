@@ -1,6 +1,7 @@
 package com.fishapi.dto;
 
 import com.fishapi.model.PapelAcesso;
+import com.fishapi.model.Plano;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -27,6 +28,10 @@ public record ApiKeyRequest(
                 + "ADMIN (tudo + /api-keys)",
                 example = "CUIDADOR", requiredMode = Schema.RequiredMode.REQUIRED)
         @NotNull(message = "O papel é obrigatório (VISITANTE, CUIDADOR, BIOLOGO, GERENTE ou ADMIN)")
-        PapelAcesso papel
+        PapelAcesso papel,
+
+        @Schema(description = "Plano de assinatura (define o limite de requisições). Opcional: o padrão é GRATUITO.",
+                example = "BASICO", allowableValues = {"GRATUITO", "BASICO", "PROFISSIONAL"})
+        Plano plano
 ) {
 }

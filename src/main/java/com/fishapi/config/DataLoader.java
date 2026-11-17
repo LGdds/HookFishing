@@ -77,18 +77,18 @@ public class DataLoader implements CommandLineRunner {
     @Transactional
     public void run(String... args) {
         // Chaves fixas para testar no Swagger (uma por papel)
-        apiKeyService.garantirChave("Swagger - ADMIN", "demo@hookfishing.com", PapelAcesso.ADMIN, chaveAdmin);
-        apiKeyService.garantirChave("Swagger - GERENTE", "demo@hookfishing.com", PapelAcesso.GERENTE, chaveGerente);
-        apiKeyService.garantirChave("Swagger - BIOLOGO", "demo@hookfishing.com", PapelAcesso.BIOLOGO, chaveBiologo);
-        apiKeyService.garantirChave("Swagger - CUIDADOR", "demo@hookfishing.com", PapelAcesso.CUIDADOR, chaveCuidador);
-        apiKeyService.garantirChave("Swagger - VISITANTE", "demo@hookfishing.com", PapelAcesso.VISITANTE, chaveVisitante);
+        apiKeyService.garantirChave("Swagger - ADMIN", "demo@hookfishing.com", PapelAcesso.ADMIN, Plano.PROFISSIONAL, chaveAdmin);
+        apiKeyService.garantirChave("Swagger - GERENTE", "demo@hookfishing.com", PapelAcesso.GERENTE, Plano.BASICO, chaveGerente);
+        apiKeyService.garantirChave("Swagger - BIOLOGO", "demo@hookfishing.com", PapelAcesso.BIOLOGO, Plano.BASICO, chaveBiologo);
+        apiKeyService.garantirChave("Swagger - CUIDADOR", "demo@hookfishing.com", PapelAcesso.CUIDADOR, Plano.GRATUITO, chaveCuidador);
+        apiKeyService.garantirChave("Swagger - VISITANTE", "demo@hookfishing.com", PapelAcesso.VISITANTE, Plano.GRATUITO, chaveVisitante);
 
         // Usuários para entrar no front-end com e-mail e senha (um por papel)
-        authService.garantirUsuario("Marina Alves", "admin@hookfishing.com", "admin123", PapelAcesso.ADMIN);
-        authService.garantirUsuario("Rafael Costa", "gerente@hookfishing.com", "gerente123", PapelAcesso.GERENTE);
-        authService.garantirUsuario("Beatriz Lima", "biologo@hookfishing.com", "biologo123", PapelAcesso.BIOLOGO);
-        authService.garantirUsuario("Lucas Pereira", "cuidador@hookfishing.com", "cuidador123", PapelAcesso.CUIDADOR);
-        authService.garantirUsuario("Júlia Santos", "visitante@hookfishing.com", "visitante123", PapelAcesso.VISITANTE);
+        authService.garantirUsuario("Marina Alves", "admin@hookfishing.com", "admin123", PapelAcesso.ADMIN, Plano.PROFISSIONAL);
+        authService.garantirUsuario("Rafael Costa", "gerente@hookfishing.com", "gerente123", PapelAcesso.GERENTE, Plano.BASICO);
+        authService.garantirUsuario("Beatriz Lima", "biologo@hookfishing.com", "biologo123", PapelAcesso.BIOLOGO, Plano.BASICO);
+        authService.garantirUsuario("Lucas Pereira", "cuidador@hookfishing.com", "cuidador123", PapelAcesso.CUIDADOR, Plano.GRATUITO);
+        authService.garantirUsuario("Júlia Santos", "visitante@hookfishing.com", "visitante123", PapelAcesso.VISITANTE, Plano.GRATUITO);
 
         if (especieRepository.count() > 0) {
             return;
