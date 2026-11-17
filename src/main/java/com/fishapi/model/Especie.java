@@ -15,13 +15,16 @@ public class Especie {
     private Long id;
 
     @NotBlank(message = "O nome da espécie é obrigatório")
-    @Size(min = 3, max = 100)
+    @Size(min = 3, max = 100, message = "O nome da espécie deve ter entre 3 e 100 caracteres")
+    @Column(nullable = false, unique = true, length = 100)
     private String nome;
 
     @NotBlank(message = "A família é obrigatória")
-    @Size(min = 3, max = 100)
+    @Size(min = 3, max = 100, message = "A família deve ter entre 3 e 100 caracteres")
+    @Column(nullable = false, length = 100)
     private String familia;
 
+    // One-to-Many: uma espécie possui vários peixes
     @OneToMany(mappedBy = "especie")
     private List<Peixe> peixes = new ArrayList<>();
 

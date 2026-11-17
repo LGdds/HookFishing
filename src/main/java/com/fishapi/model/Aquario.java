@@ -17,17 +17,21 @@ public class Aquario {
     private Long id;
 
     @NotBlank(message = "O nome do aquário é obrigatório")
-    @Size(min = 3, max = 100)
+    @Size(min = 3, max = 100, message = "O nome do aquário deve ter entre 3 e 100 caracteres")
+    @Column(nullable = false, unique = true, length = 100)
     private String nome;
 
     @NotNull(message = "A capacidade é obrigatória")
-    @Min(value = 1, message = "A capacidade deve ser maior que zero")
+    @Min(value = 1, message = "A capacidade deve ser de pelo menos 1 litro")
+    @Column(nullable = false)
     private Integer capacidadeLitros;
 
+    // One-to-One: cada aquário possui (no máximo) um cuidador e cada cuidador cuida de um aquário
     @OneToOne
-    @JoinColumn(name = "cuidador_id")
+    @JoinColumn(name = "cuidador_id", unique = true)
     private Cuidador cuidador;
 
+    // One-to-Many: um aquário possui vários peixes
     @OneToMany(mappedBy = "aquario")
     private List<Peixe> peixes = new ArrayList<>();
 

@@ -1,1159 +1,324 @@
 # 🐟 HookFishing
 
-API REST desenvolvida em **Java + Spring Boot** para gerenciamento de peixes e recursos relacionados a um aquário.
+API REST em **Java + Spring Boot** para gerenciamento de um aquário: peixes, espécies, aquários, cuidadores e alimentações.
 
-O projeto foi desenvolvido com foco em demonstrar os principais recursos de uma API REST utilizando:
-
-* Spring Boot
-* Java 25
-* Maven
-* Spring Data JPA
-* H2 Database
-* Bean Validation
-* Spring HATEOAS
-* Springdoc OpenAPI / Swagger
-* Paginação com `Pageable`
-* Relacionamentos entre entidades
-* Enum
-* Operações CRUD
+| Parte | Conteúdo |
+|---|---|
+| **Parte 1** | Spring Boot, Maven, H2, Spring Data JPA, 5 entidades com One-to-One / One-to-Many / Many-to-Many, Bean Validation, enum, CRUD completo, paginação com `Pageable`, consultas personalizadas, códigos HTTP, Swagger e HATEOAS |
+| **Parte 2** | Idempotência (`X-Idempotency-Key`), autenticação por API Key (`X-API-Key`) com papéis da equipe do aquário, rate limiting (429 + `Retry-After`), CORS, versionamento por header (`X-API-Version`) e tratamento global de erros com `@ControllerAdvice` |
 
 ---
 
-## 📋 Sumário
+## ▶️ Como executar
 
-* [Sobre o projeto](#-sobre-o-projeto)
-* [Tecnologias utilizadas](#-tecnologias-utilizadas)
-* [Estrutura do projeto](#-estrutura-do-projeto)
-* [Entidades](#-entidades)
-* [Relacionamentos](#-relacionamentos)
-* [Validações](#-validações)
-* [Banco de dados](#-banco-de-dados)
-* [Como executar](#-como-executar)
-* [Swagger / OpenAPI](#-swagger--openapi)
-* [Endpoints](#-endpoints)
-* [Paginação](#-paginação)
-* [HATEOAS](#-hateoas)
-* [Testando a API](#-testando-a-api)
-* [Exemplos de requisições](#-exemplos-de-requisições)
-* [Códigos HTTP](#-códigos-http)
-* [Requisitos do projeto](#-requisitos-atendidos)
-
----
-
-# 🐠 Sobre o projeto
-
-O **HookFishing** é uma API REST para gerenciamento de um ambiente de aquário.
-
-A aplicação permite cadastrar e administrar:
-
-* 🐟 Peixes
-* 🧬 Espécies
-* 🏠 Aquários
-* 👨‍🔬 Cuidadores
-* 🍽️ Alimentações
-
-Cada entidade possui operações de criação, consulta, atualização e exclusão.
-
-Além do CRUD, cada entidade possui uma consulta personalizada através de um endpoint `/buscar`.
-
----
-
-# 🛠️ Tecnologias utilizadas
-
-| Tecnologia        | Utilização                  |
-| ----------------- | --------------------------- |
-| Java 25           | Linguagem de programação    |
-| Spring Boot       | Framework principal         |
-| Spring Web        | Criação da API REST         |
-| Spring Data JPA   | Persistência de dados       |
-| Hibernate         | ORM                         |
-| H2 Database       | Banco de dados em memória   |
-| Bean Validation   | Validação dos dados         |
-| Spring HATEOAS    | HATEOAS e links REST        |
-| Springdoc OpenAPI | Documentação da API         |
-| Swagger UI        | Interface para testar a API |
-| Maven             | Gerenciamento do projeto    |
-
----
-
-# 📁 Estrutura do projeto
-
-```text
-fishapi/
-│
-├── src/
-│   ├── main/
-│   │   ├── java/
-│   │   │   └── com/
-│   │   │       └── fishapi/
-│   │   │           │
-│   │   │           ├── FishapiApplication.java
-│   │   │           │
-│   │   │           ├── controller/
-│   │   │           │   ├── PeixeController.java
-│   │   │           │   ├── EspecieController.java
-│   │   │           │   ├── AquarioController.java
-│   │   │           │   ├── CuidadorController.java
-│   │   │           │   └── AlimentacaoController.java
-│   │   │           │
-│   │   │           ├── model/
-│   │   │           │   ├── Peixe.java
-│   │   │           │   ├── Especie.java
-│   │   │           │   ├── Aquario.java
-│   │   │           │   ├── Cuidador.java
-│   │   │           │   ├── Alimentacao.java
-│   │   │           │   └── TipoAlimentacao.java
-│   │   │           │
-│   │   │           └── repository/
-│   │   │               ├── PeixeRepository.java
-│   │   │               ├── EspecieRepository.java
-│   │   │               ├── AquarioRepository.java
-│   │   │               ├── CuidadorRepository.java
-│   │   │               └── AlimentacaoRepository.java
-│   │   │
-│   │   └── resources/
-│   │       └── application.properties
-│   │
-│   └── test/
-│       └── java/
-│
-├── pom.xml
-└── README.md
-```
-
----
-
-# 🧩 Entidades
-
-O projeto possui cinco entidades principais.
-
-## 🐟 Peixe
-
-Representa um peixe cadastrado no sistema.
-
-Principais atributos:
-
-```text
-id
-nome
-idade
-tamanho
-especie
-aquario
-alimentacoes
-```
-
----
-
-## 🧬 Especie
-
-Representa a espécie à qual um peixe pertence.
-
-Atributos:
-
-```text
-id
-nome
-familia
-peixes
-```
-
----
-
-## 🏠 Aquario
-
-Representa um aquário existente no sistema.
-
-Atributos:
-
-```text
-id
-nome
-capacidadeLitros
-cuidador
-peixes
-```
-
----
-
-## 👨‍🔬 Cuidador
-
-Representa o responsável por um aquário.
-
-Atributos:
-
-```text
-id
-nome
-email
-```
-
----
-
-## 🍽️ Alimentacao
-
-Representa uma alimentação disponível para os peixes.
-
-Atributos:
-
-```text
-id
-nome
-tipo
-peixes
-```
-
----
-
-# 🔗 Relacionamentos
-
-O projeto utiliza três tipos diferentes de relacionamentos JPA.
-
-## One-to-Many
-
-Uma espécie pode possuir vários peixes:
-
-```text
-Especie 1 ───────── N Peixe
-```
-
-Um aquário também pode possuir vários peixes:
-
-```text
-Aquario 1 ───────── N Peixe
-```
-
----
-
-## Many-to-Many
-
-Um peixe pode receber diferentes tipos de alimentação.
-
-Uma alimentação também pode ser utilizada por vários peixes.
-
-```text
-Peixe N ───────── N Alimentacao
-```
-
-Esse relacionamento é armazenado através da tabela:
-
-```text
-peixe_alimentacao
-```
-
----
-
-## One-to-One
-
-Cada aquário possui um cuidador:
-
-```text
-Aquario 1 ───────── 1 Cuidador
-```
-
----
-
-# 🔤 Enum
-
-O projeto possui o enum `TipoAlimentacao`.
-
-Valores disponíveis:
-
-```java
-RACAO
-VIVA
-VEGETAL
-CONGELADA
-```
-
-Exemplo:
-
-```json
-{
-  "nome": "Ração Tropical",
-  "tipo": "RACAO"
-}
-```
-
----
-
-# ✅ Validações
-
-As entidades utilizam **Bean Validation** através das anotações do pacote `jakarta.validation`.
-
-Exemplos utilizados:
-
-```java
-@NotBlank
-@Size
-@NotNull
-@Min
-@Positive
-@Email
-```
-
-### Peixe
-
-* Nome obrigatório
-* Nome entre 2 e 100 caracteres
-* Idade obrigatória
-* Idade não pode ser negativa
-* Tamanho obrigatório
-* Tamanho deve ser maior que zero
-
-### Espécie
-
-* Nome obrigatório
-* Nome entre 3 e 100 caracteres
-* Família obrigatória
-* Família entre 3 e 100 caracteres
-
-### Aquário
-
-* Nome obrigatório
-* Nome entre 3 e 100 caracteres
-* Capacidade obrigatória
-* Capacidade mínima de 1 litro
-
-### Cuidador
-
-* Nome obrigatório
-* Nome entre 3 e 100 caracteres
-* E-mail obrigatório
-* E-mail deve possuir formato válido
-
-### Alimentação
-
-* Nome obrigatório
-* Nome entre 3 e 100 caracteres
-* Tipo obrigatório
-
----
-
-# 🗄️ Banco de dados
-
-O projeto utiliza o **H2 Database** em memória.
-
-Configuração:
-
-```properties
-spring.datasource.url=jdbc:h2:mem:fishdb
-spring.datasource.driver-class-name=org.h2.Driver
-spring.datasource.username=sa
-spring.datasource.password=
-
-spring.jpa.hibernate.ddl-auto=create-drop
-```
-
-Como o banco é em memória, os dados são apagados quando a aplicação é encerrada.
-
-Isso é adequado para desenvolvimento e testes acadêmicos.
-
----
-
-# ▶️ Como executar
-
-## 1. Pré-requisitos
-
-É necessário possuir instalado:
-
-* Java 25
-* Maven
-* IDE de sua preferência
-
-Verifique o Java:
+Pré-requisitos: **Java 25** e Maven (ou o wrapper `mvnw` incluído).
 
 ```bash
-java -version
+./mvnw spring-boot:run        # Linux / macOS
+mvnw.cmd spring-boot:run      # Windows
 ```
 
-Verifique o Maven:
+| O quê | Endereço |
+|---|---|
+| **Front-end** | http://localhost:8080/ |
+| Swagger (tema laranja/azul, seletor de versão e login) | http://localhost:8080/swagger-ui/index.html (ou http://localhost:8080/swagger-ui.html, que redireciona) |
+| OpenAPI (JSON) | http://localhost:8080/v3/api-docs/v1 e http://localhost:8080/v3/api-docs/v2 |
+| Console H2 | http://localhost:8080/h2-console (JDBC URL `jdbc:h2:mem:fishdb`, usuário `sa`, senha em branco) |
 
-```bash
-mvn -version
-```
+### Testando no Swagger
+
+1. Escolha a versão da API no seletor do topo (**v1** ou **v2**). Em cada versão, o header `X-API-Version` já vem preenchido.
+2. Clique em **Authorize** e entre com **e-mail e senha** (ex.: `admin@hookfishing.com` / `admin123`). Se preferir, informe diretamente uma API Key, como `hf_admin_demo_2025`.
+3. Abra uma seção, clique em **Try it out** e depois em **Execute**: os campos já vêm preenchidos com dados reais da base.
+
+O Swagger abre no endereço padrão (`/swagger-ui/index.html`; `/swagger-ui.html` redireciona para lá). A página é `src/main/resources/swagger/index.html`, entregue pelo `SwaggerUiFilter` no lugar da página padrão do springdoc. Ela usa os arquivos do Swagger UI do próprio springdoc (com a CDN como reserva) e o tema laranja e azul de `static/css/swagger-tema.css`.
 
 ---
 
-## 2. Clonar o projeto
+## 🖥️ Front-end
 
-```bash
-git clone <https://github.com/LGdds/HookFishing.git>
-```
+Página em HTML, CSS e JavaScript puro, sem dependências, em `src/main/resources/static`. A própria API serve o front-end em **http://localhost:8080/**.
 
-Entrar na pasta:
+| Recurso | Como aparece no front-end |
+|---|---|
+| **Login e cadastro** | Tela de login com e-mail e senha (`POST /auth/login`) e tela "Criar conta" (`POST /auth/cadastro`, com `X-Idempotency-Key`). O login devolve a API Key do usuário, enviada depois no header `X-API-Key` |
+| **Papéis da equipe** | Os botões de cadastrar, editar e excluir aparecem por recurso, conforme as permissões do papel (vindas de `GET /api-keys/me`). Ex.: o CUIDADOR vê "Novo" e "Editar" em Peixes, mas não "Excluir". A aba API Keys só aparece para ADMIN |
+| **CRUD** das 5 entidades | Uma aba por entidade: tabela paginada, ordenação, tamanho da página, busca personalizada e formulário de cadastro/edição com os relacionamentos (selects e checkboxes) |
+| **Idempotência** | Cada formulário de cadastro gera uma `X-Idempotency-Key` (exibida no rodapé). Clicar em Salvar de novo reenvia a mesma chave, e a API não duplica o registro |
+| **Rate limit** | Barra no topo com `X-RateLimit-Remaining / X-RateLimit-Limit`. Ao receber 429, aparece um aviso com contagem regressiva do `Retry-After` |
+| **Versionamento** | Botões **v1 / v2** na aba Peixes, que enviam o header `X-API-Version` |
+| **Erros** | Mensagens do `ErroResponse` em avisos, com os campos inválidos destacados no formulário |
+| **API Keys** | Gerar (exibe o valor uma única vez, com botão de copiar), editar papel e status, regenerar e revogar |
+| **Testes da Parte 2** | Tabela de cenários por requisito (4.1 a 5) com requisição, status esperado e resultado (Passou/Falhou), detalhes da resposta e botão "Executar todos" |
+| **Painel de requisições** | Lateral com cada chamada feita: método, rota, status e os headers da Parte 2 enviados e recebidos |
 
-```bash
-cd fishapi
-```
+**CORS na prática:** o front-end também funciona aberto em outra origem permitida. Por exemplo, abrindo `index.html` pelo Live Server do VS Code (porta 5500), ele chama a API em `http://localhost:8080` e o CORS libera a origem. Em uma porta fora da lista, o navegador bloqueia as chamadas.
 
 ---
 
-## 3. Compilar
+## 🐠 Dados carregados ao iniciar
 
-```bash
-mvn clean install
-```
+O banco é em memória. A classe `DataLoader` cadastra os dados abaixo sempre que a aplicação sobe, e todos os exemplos do Swagger usam esses registros.
+
+| Recurso | Registros (id) |
+|---|---|
+| Espécies | 1 Peixe-palhaço (Pomacentridae) · 2 Cirurgião-patela (Acanthuridae) · 3 Betta (Osphronemidae) · 4 Tetra-neon (Characidae) |
+| Cuidadores | 1 João Silva · 2 Ana Souza · 3 Carlos Lima (sem aquário) |
+| Aquários | 1 Aquário Principal, 200 L (João) · 2 Aquário Recifal, 350 L (Ana) · 3 Aquário Comunitário, 120 L (sem cuidador) |
+| Alimentações | 1 Ração Tropical (RACAO) · 2 Artêmia Viva (VIVA) · 3 Spirulina em Flocos (VEGETAL) · 4 Larva de Mosquito Congelada (CONGELADA) |
+| Peixes | 1 Nemo · 2 Marlin · 3 Dory · 4 Azulão · 5 Faísca |
+| API Keys (para o Swagger) | 1 `hf_admin_demo_2025` (ADMIN) · 2 `hf_gerente_demo_2025` (GERENTE) · 3 `hf_biologo_demo_2025` (BIOLOGO) · 4 `hf_cuidador_demo_2025` (CUIDADOR) · 5 `hf_visitante_demo_2025` (VISITANTE) |
+| Usuários (para o front-end) | `admin@hookfishing.com` / `admin123` (ADMIN) · `gerente@hookfishing.com` / `gerente123` (GERENTE) · `biologo@hookfishing.com` / `biologo123` (BIOLOGO) · `cuidador@hookfishing.com` / `cuidador123` (CUIDADOR) · `visitante@hookfishing.com` / `visitante123` (VISITANTE) |
 
 ---
 
-## 4. Executar
-
-```bash
-mvn spring-boot:run
-```
-
-A aplicação será iniciada na porta:
+## 🧩 Entidades e relacionamentos
 
 ```text
-8080
+Especie  1 ──── N  Peixe        (One-to-Many)
+Aquario  1 ──── N  Peixe        (One-to-Many)
+Aquario  1 ──── 1  Cuidador     (One-to-One)
+Peixe    N ──── N  Alimentacao  (Many-to-Many, tabela peixe_alimentacao)
 ```
 
----
+Enum: `TipoAlimentacao` → `RACAO`, `VIVA`, `VEGETAL`, `CONGELADA`.
 
-# 📚 Swagger / OpenAPI
+Regras de negócio:
 
-A API possui documentação automática através do Springdoc OpenAPI.
-
-Com a aplicação executando, acesse:
-
-**Swagger UI:**
-
-http://localhost:8080/swagger-ui.html
-
-Também é possível acessar:
-
-http://localhost:8080/swagger-ui/index.html
-
-A especificação OpenAPI está disponível em:
-
-http://localhost:8080/v3/api-docs
-
-O Swagger permite:
-
-* visualizar todos os endpoints;
-* visualizar parâmetros;
-* visualizar códigos HTTP;
-* visualizar os modelos;
-* executar requisições;
-* testar POST, GET, PUT e DELETE diretamente pelo navegador.
+- Nome da espécie, nome do aquário, nome da alimentação e e-mail do cuidador são únicos (senão **409**).
+- Cada cuidador cuida de no máximo um aquário (senão **409**).
+- Não é possível excluir uma espécie com peixes, um aquário com peixes nem um cuidador responsável por um aquário (**409**).
+- Ao excluir uma alimentação, ela é retirada da dieta dos peixes (Many-to-Many).
 
 ---
 
-# 🗃️ H2 Console
-
-O console do banco H2 está habilitado.
-
-Acesse:
-
-http://localhost:8080/h2-console
-
-Utilize:
+## 📁 Estrutura
 
 ```text
-JDBC URL: jdbc:h2:mem:fishdb
-User Name: sa
-Password:
-```
+src/main/java/com/fishapi
+├── config/          OpenApiConfig (Swagger), ExemplosOpenApi, WebConfig (CORS + interceptors), DataLoader
+├── controller/      Peixe, Especie, Aquario, Cuidador, Alimentacao, ApiKey + Hateoas (paginação com links)
+├── dto/             Records de entrada (Request) e saída (Response), com validações e exemplos do Swagger
+├── exception/       GlobalExceptionHandler (@RestControllerAdvice), ErroResponse e exceções da API
+├── idempotencia/    IdempotenciaService (X-Idempotency-Key)
+├── model/           Entidades JPA + enums TipoAlimentacao e NivelAcesso
+├── ratelimit/       RateLimiter e RateLimitInterceptor
+├── repository/      Repositórios Spring Data JPA com as consultas personalizadas
+├── seguranca/       ApiKeyService e ApiKeyInterceptor (X-API-Key)
+├── service/         Regras de negócio de cada entidade
+└── versionamento/   ApiVersionInterceptor (X-API-Version)
 
-A senha deve ficar em branco.
-
----
-
-# 🌐 Endpoints
-
-Todas as entidades possuem seis endpoints.
-
----
-
-## 🐟 Peixes
-
-### Listar peixes
-
-```http
-GET /peixes
-```
-
-Lista os peixes de forma paginada.
-
----
-
-### Buscar peixe por ID
-
-```http
-GET /peixes/{id}
-```
-
-Exemplo:
-
-```http
-GET /peixes/1
+src/main/resources/static   Front-end (index.html, css/app.css, js/app.js)
 ```
 
 ---
 
-### Cadastrar peixe
+## 🌐 Endpoints
+
+Todas as entidades têm 6 endpoints: listar (paginado), buscar por ID, consulta personalizada, cadastrar, atualizar e excluir.
+
+| Entidade | Listar / Criar | Por ID (GET / PUT / DELETE) | Consulta personalizada |
+|---|---|---|---|
+| Peixe | `/peixes` | `/peixes/{id}` | `GET /peixes/buscar?nome=nemo` |
+| Espécie | `/especies` | `/especies/{id}` | `GET /especies/buscar?familia=Pomacentridae` |
+| Aquário | `/aquarios` | `/aquarios/{id}` | `GET /aquarios/buscar?capacidadeMinima=200` |
+| Cuidador | `/cuidadores` | `/cuidadores/{id}` | `GET /cuidadores/buscar?email=joao@email.com` |
+| Alimentação | `/alimentacoes` | `/alimentacoes/{id}` | `GET /alimentacoes/buscar?tipo=RACAO` |
+
+Autenticação (rotas públicas):
+
+| Método | Rota | Descrição |
+|---|---|---|
+| POST | `/auth/cadastro` | Cria uma conta (papel `VISITANTE`). Exige `X-Idempotency-Key` |
+| POST | `/auth/login` | Entra com e-mail e senha e recebe a API Key do usuário |
+
+Gerenciamento de API Keys (apenas ADMIN, exceto `/me`):
+
+| Método | Rota | Descrição |
+|---|---|---|
+| GET | `/api-keys` | Lista as chaves (apenas o prefixo, nunca o valor completo) |
+| GET | `/api-keys/me` | Dados, papel e permissões da chave em uso (qualquer papel) |
+| GET | `/api-keys/{id}` | Busca uma chave |
+| POST | `/api-keys` | Gera uma nova chave (o valor aparece apenas nesta resposta) |
+| PUT | `/api-keys/{id}` | Altera dono, papel ou ativa/desativa |
+| POST | `/api-keys/{id}/regenerar` | Gera um novo valor; o anterior para de funcionar |
+| DELETE | `/api-keys/{id}` | Revoga a chave |
+
+Paginação: `?page=0&size=10&sort=nome,asc` (`size` máximo 50). Campo de ordenação inválido → **400**.
+
+### Exemplo de cadastro
 
 ```http
 POST /peixes
-```
+X-API-Key: hf_cuidador_demo_2025
+X-Idempotency-Key: 3f2b8c1e-7d4a-4f6b-9c2e-1a5d8e7f9b30
+Content-Type: application/json
 
-Exemplo:
-
-```json
 {
-  "nome": "Nemo",
-  "idade": 2,
-  "tamanho": 8.5
+  "nome": "Coral",
+  "idade": 1,
+  "tamanho": 7.0,
+  "especieId": 1,
+  "aquarioId": 1,
+  "alimentacaoIds": [1, 2]
 }
 ```
 
 ---
 
-### Atualizar peixe
+## 🔐 Parte 2 — Recursos avançados
 
-```http
-PUT /peixes/{id}
+### 4.1 Idempotência — `X-Idempotency-Key`
+
+Todo **POST de cadastro** (inclusive `POST /auth/cadastro`) exige o header `X-Idempotency-Key` (8 a 100 caracteres, por exemplo um UUID). As chaves usadas ficam na tabela `registro_idempotencia`, separadas por API Key, por 24 horas. Ficam de fora o login e a regeneração de chave, que não criam recursos.
+
+| Situação | Resultado |
+|---|---|
+| Primeira requisição com a chave | Cria o recurso → **201** + `X-Idempotent-Replayed: false` |
+| Mesma chave + mesmo corpo | **Não cria de novo**; devolve o mesmo recurso → **201** + `X-Idempotent-Replayed: true` |
+| Mesma chave + corpo diferente | **422** |
+| Mesma chave ainda em processamento | **409** |
+| Header ausente ou inválido | **400** |
+| A criação falhou (ex.: 400, 404 ou 409) | A chave é liberada para nova tentativa |
+
+### 4.2 Autenticação com chave de API — `X-API-Key`
+
+- Todas as rotas da API exigem `X-API-Key`. Ficam livres: `/auth/cadastro`, `/auth/login`, o front-end, o Swagger, `/v3/api-docs` e o H2 Console.
+- **Usuários:** `POST /auth/cadastro` cria a conta (senha salva com hash PBKDF2) e uma API Key própria com o papel `VISITANTE`. `POST /auth/login` confere e-mail e senha e devolve um novo valor para essa chave; cada login invalida o anterior. Um `ADMIN` promove o usuário alterando o papel da chave em `PUT /api-keys/{id}`. Chaves de usuários não podem ser excluídas, apenas desativadas.
+- Cada chave tem um **papel** inspirado na equipe de um aquário, com permissões diferentes em cada recurso:
+
+| Papel | Quem é | Peixes | Alimentações | Espécies | Aquários | Cuidadores | API Keys |
+|---|---|---|---|---|---|---|---|
+| `VISITANTE` | Público do aquário | ver | ver | ver | ver | ver | – |
+| `CUIDADOR` | Equipe do dia a dia | ver, cadastrar, editar | ver, cadastrar, editar | ver | ver | ver | – |
+| `BIOLOGO` | Parte científica | tudo | tudo | tudo | ver | ver | – |
+| `GERENTE` | Estrutura do aquário | tudo | tudo | tudo | tudo | tudo | – |
+| `ADMIN` | Administrador | tudo | tudo | tudo | tudo | tudo | tudo |
+
+"Tudo" = ver, cadastrar, editar e excluir. A matriz fica em `seguranca/Permissoes.java` e é usada em três lugares: no `ApiKeyInterceptor` (para liberar ou bloquear), no Swagger (cada endpoint mostra os **papéis permitidos** e um exemplo de 403) e em `GET /api-keys/me` (que devolve as permissões para o front-end).
+
+- A chave é gerada com `SecureRandom` e só o hash **SHA-256** é salvo.
+- **Login no Swagger:** o botão *Authorize* usa o fluxo *password* do OAuth2. O Swagger envia e-mail e senha para `POST /auth/token`, recebe a API Key do usuário e passa a enviá-la no header `Authorization: Bearer`. A API aceita a chave tanto em `X-API-Key` quanto em `Authorization: Bearer`.
+- Chave ausente, inválida ou desativada → **401** (com o header `WWW-Authenticate`).
+- Papel sem permissão → **403**, com uma mensagem que diz quais papéis podem. Exemplo: *"Seu papel CUIDADOR não permite excluir peixes. Papéis permitidos: BIOLOGO, GERENTE ou ADMIN."*
+
+### 4.3 Rate limiting
+
+- Algoritmo **Token Bucket**, por cliente (a API Key ou, sem chave, o IP). Cada cliente tem um balde com **60 fichas**; cada requisição consome uma, e o balde é reabastecido com **1 ficha por segundo** até ficar cheio de novo.
+- Na prática: rajadas de até 60 requisições seguidas e, em média, 60 por minuto. Os valores ficam no `application.properties`.
+- Implementação em `ratelimit/RateLimiter.java`. Ela usa `ConcurrentHashMap.compute`, para que duas requisições simultâneas não consumam a mesma ficha.
+- Toda resposta traz `X-RateLimit-Limit`, `X-RateLimit-Remaining` e `X-RateLimit-Reset`.
+- Ao exceder o limite → **429 Too Many Requests** com o header `Retry-After`, que indica os segundos até poder tentar de novo.
+
+Para demonstrar, reduza a capacidade para 5 em `hookfishing.rate-limit.capacidade` e faça 6 requisições seguidas:
+
+```bash
+for i in $(seq 1 6); do curl -s -o /dev/null -w "%{http_code}\n" -H "X-API-Key: hf_visitante_demo_2025" http://localhost:8080/peixes; done
 ```
 
-Exemplo:
+### 4.4 CORS
 
-```http
-PUT /peixes/1
+Configurado em `WebConfig` a partir da propriedade `hookfishing.cors.origens-permitidas`. Origens padrão:
+
+```text
+http://localhost:3000, http://localhost:5173, http://localhost:5500, http://127.0.0.1:5500, http://localhost:8080
 ```
 
----
+- Métodos permitidos: `GET`, `POST`, `PUT`, `DELETE` e `OPTIONS`.
+- Headers aceitos: `Content-Type`, `Accept`, `X-API-Key`, `X-API-Version` e `X-Idempotency-Key`.
+- Headers expostos ao JavaScript: `Location`, `Retry-After`, `X-RateLimit-*`, `X-API-Version`, `X-Idempotency-Key` e `X-Idempotent-Replayed`.
 
-### Excluir peixe
+### 4.5 Versionamento — `X-API-Version`
 
-```http
-DELETE /peixes/{id}
+`GET /peixes` e `GET /peixes/{id}` têm duas versões:
+
+| Header | Resposta |
+|---|---|
+| sem header ou `X-API-Version: 1` | Relacionamentos como IDs: `especieId`, `aquarioId`, `alimentacaoIds` |
+| `X-API-Version: 2` | Relacionamentos detalhados (`especie`, `aquario`, `alimentacoes`) e campos calculados (`faixaEtaria`, `tamanhoFormatado`) |
+| qualquer outro valor | **400** |
+
+A versão usada volta no header de resposta `X-API-Version`.
+
+```bash
+curl -H "X-API-Key: hf_visitante_demo_2025" http://localhost:8080/peixes/1
+curl -H "X-API-Key: hf_visitante_demo_2025" -H "X-API-Version: 2" http://localhost:8080/peixes/1
 ```
 
-Exemplo:
+### 5. Validações e tratamento de erros
 
-```http
-DELETE /peixes/1
-```
-
----
-
-### Buscar peixe por nome
-
-```http
-GET /peixes/buscar?nome=Nemo
-```
-
----
-
-# 🧬 Espécies
-
-### Listar espécies
-
-```http
-GET /especies
-```
-
-### Buscar por ID
-
-```http
-GET /especies/{id}
-```
-
-### Cadastrar
-
-```http
-POST /especies
-```
-
-Exemplo:
+- Bean Validation nos DTOs de entrada (`@NotBlank`, `@Size`, `@NotNull`, `@Min`, `@Positive`, `@Email`).
+- `GlobalExceptionHandler` (`@RestControllerAdvice`) converte toda falha para o mesmo formato:
 
 ```json
 {
-  "nome": "Peixe-palhaço",
-  "familia": "Pomacentridae"
+  "timestamp": "2026-11-12T22:30:00Z",
+  "status": 400,
+  "erro": "Bad Request",
+  "mensagem": "Um ou mais campos são inválidos. Corrija os campos listados em 'campos' e envie novamente.",
+  "caminho": "/peixes",
+  "campos": [ { "campo": "nome", "mensagem": "O nome do peixe é obrigatório" } ]
 }
 ```
 
-### Atualizar
+| Código | Quando acontece |
+|---|---|
+| 200 | Consulta ou atualização |
+| 201 | Recurso criado (com header `Location`) |
+| 204 | Recurso excluído |
+| 400 | Validação, JSON inválido, parâmetro, header ou ordenação inválidos, versão inexistente |
+| 401 | `X-API-Key` ausente, inválida ou desativada |
+| 403 | O papel da chave não permite a operação |
+| 404 | Recurso ou relacionamento inexistente, ou rota inexistente |
+| 405 | Método não suportado na rota |
+| 409 | Duplicidade, recurso ainda vinculado, chave de idempotência em processamento |
+| 415 | `Content-Type` diferente de `application/json` |
+| 422 | Chave de idempotência reutilizada com outro corpo |
+| 429 | Limite de requisições excedido |
+| 500 | Erro inesperado |
 
-```http
-PUT /especies/{id}
-```
+### 6. Documentação
 
-### Excluir
+O Swagger (tema laranja e azul, com seletor entre v1 e v2) tem uma descrição geral explicando autenticação, idempotência, rate limit, versionamento, CORS, paginação, dados iniciais e códigos HTTP. Além disso:
 
-```http
-DELETE /especies/{id}
-```
-
-### Buscar por nome
-
-```http
-GET /especies/buscar?nome=Peixe-palhaço
-```
-
----
-
-# 🏠 Aquários
-
-### Listar aquários
-
-```http
-GET /aquarios
-```
-
-### Buscar por ID
-
-```http
-GET /aquarios/{id}
-```
-
-### Cadastrar
-
-```http
-POST /aquarios
-```
-
-Exemplo:
-
-```json
-{
-  "nome": "Aquário Principal",
-  "capacidadeLitros": 200
-}
-```
-
-### Atualizar
-
-```http
-PUT /aquarios/{id}
-```
-
-### Excluir
-
-```http
-DELETE /aquarios/{id}
-```
-
-### Buscar por nome
-
-```http
-GET /aquarios/buscar?nome=Aquário Principal
-```
+- Cada aba tem uma descrição com exemplos do que dá para fazer nela.
+- Cada endpoint documenta todos os códigos de resposta possíveis, com exemplos de erro.
+- Todos os campos e parâmetros usam exemplos com os dados reais da base, nada de `"string"` genérico.
 
 ---
 
-# 👨‍🔬 Cuidadores
+## ⚙️ Configurações (`application.properties`)
 
-### Listar cuidadores
-
-```http
-GET /cuidadores
-```
-
-### Buscar por ID
-
-```http
-GET /cuidadores/{id}
-```
-
-### Cadastrar
-
-```http
-POST /cuidadores
-```
-
-Exemplo:
-
-```json
-{
-  "nome": "João Silva",
-  "email": "joao@email.com"
-}
-```
-
-### Atualizar
-
-```http
-PUT /cuidadores/{id}
-```
-
-### Excluir
-
-```http
-DELETE /cuidadores/{id}
-```
-
-### Buscar por e-mail
-
-```http
-GET /cuidadores/buscar?email=joao@email.com
-```
+| Propriedade | Padrão | Uso |
+|---|---|---|
+| `hookfishing.api-keys.admin` / `.gerente` / `.biologo` / `.cuidador` / `.visitante` | `hf_*_demo_2025` | Chaves de demonstração criadas ao iniciar (uma por papel) |
+| `hookfishing.rate-limit.capacidade` | `60` | Fichas do balde (rajada máxima de requisições) |
+| `hookfishing.rate-limit.recarga-por-segundo` | `1` | Fichas devolvidas ao balde por segundo |
+| `hookfishing.idempotencia.validade-horas` | `24` | Validade das chaves de idempotência |
+| `hookfishing.cors.origens-permitidas` | ver acima | Origens liberadas no CORS |
 
 ---
 
-# 🍽️ Alimentações
+## Termos de serviço
 
-### Listar alimentações
+Ao usar a HookFishing API, você concorda com as regras abaixo.
 
-```http
-GET /alimentacoes
-```
-
-### Buscar por ID
-
-```http
-GET /alimentacoes/{id}
-```
-
-### Cadastrar
-
-```http
-POST /alimentacoes
-```
-
-Exemplo:
-
-```json
-{
-  "nome": "Ração Tropical",
-  "tipo": "RACAO"
-}
-```
-
-### Atualizar
-
-```http
-PUT /alimentacoes/{id}
-```
-
-### Excluir
-
-```http
-DELETE /alimentacoes/{id}
-```
-
-### Buscar por nome
-
-```http
-GET /alimentacoes/buscar?nome=Ração Tropical
-```
+- **Use a API para o fim a que ela se destina:** gerenciar peixes, espécies, aquários, cuidadores e alimentações (ou estudar e testar o projeto).
+- **Envie dados verdadeiros e válidos**, em JSON e UTF-8, respeitando as regras de validação.
+- **Respeite a privacidade dos dados pessoais** de usuários e cuidadores (nome e e-mail), conforme a LGPD (Lei nº 13.709/2018).
+- **Não compartilhe sua API Key** e não tente burlar o rate limit, as permissões ou a autenticação. O descumprimento pode levar à desativação da chave.
+- **Exclusões não podem ser desfeitas.**
+- **Banco em memória:** os dados são apagados sempre que a aplicação reinicia.
+- A API é fornecida para fins acadêmicos, sem garantia de disponibilidade.
 
 ---
 
-# 📄 Paginação
+## Licença
 
-Todos os endpoints de listagem utilizam `Pageable`.
+Este projeto está sob a **Licença MIT** (veja o arquivo [`LICENSE`](LICENSE)).
 
-Os parâmetros disponíveis são:
-
-```text
-page
-size
-sort
-```
-
-Exemplo:
-
-```http
-GET /peixes?page=0&size=10
-```
-
-Retorna a primeira página contendo até 10 registros.
-
-Também é possível ordenar:
-
-```http
-GET /peixes?page=0&size=10&sort=nome,asc
-```
-
-Ou:
-
-```http
-GET /peixes?page=0&size=10&sort=idade,desc
-```
-
-Os parâmetros de paginação são opcionais.
-
-Portanto, também é possível simplesmente utilizar:
-
-```http
-GET /peixes
-```
+Em resumo, qualquer pessoa pode usar, copiar, modificar e distribuir o código, inclusive em projetos comerciais, desde que mantenha o aviso de copyright e o texto da licença. O software é fornecido **sem garantia**.
 
 ---
 
-# 🔗 HATEOAS
-
-A API utiliza **Spring HATEOAS** para adicionar links relacionados aos recursos.
-
-Exemplo de resposta:
-
-```json
-{
-  "id": 1,
-  "nome": "Nemo",
-  "idade": 2,
-  "tamanho": 8.5,
-  "_links": {
-    "self": {
-      "href": "http://localhost:8080/peixes/1"
-    },
-    "update": {
-      "href": "http://localhost:8080/peixes/1"
-    },
-    "delete": {
-      "href": "http://localhost:8080/peixes/1"
-    }
-  }
-}
-```
-
-O link `self` representa o próprio recurso.
-
-O link `update` representa o endereço utilizado para atualização.
-
-O link `delete` representa o endereço utilizado para exclusão.
-
----
-
-# 🧪 Testando a API
-
-Os endpoints podem ser testados através de:
-
-* Swagger UI
-* Postman
-* Insomnia
-* `curl`
-* navegador, para requisições GET
-
-A forma recomendada para apresentação do projeto é utilizar o **Swagger UI**, pois ele permite demonstrar os endpoints diretamente.
-
----
-
-## Teste de criação
-
-Primeiro, crie uma espécie:
-
-```http
-POST /especies
-```
-
-```json
-{
-  "nome": "Peixe-palhaço",
-  "familia": "Pomacentridae"
-}
-```
-
-Depois crie um aquário:
-
-```http
-POST /aquarios
-```
-
-```json
-{
-  "nome": "Aquário Principal",
-  "capacidadeLitros": 200
-}
-```
-
-Depois crie uma alimentação:
-
-```http
-POST /alimentacoes
-```
-
-```json
-{
-  "nome": "Ração Tropical",
-  "tipo": "RACAO"
-}
-```
-
-Depois pode cadastrar um peixe:
-
-```http
-POST /peixes
-```
-
-```json
-{
-  "nome": "Nemo",
-  "idade": 2,
-  "tamanho": 8.5
-}
-```
-
----
-
-# ❌ Testando validações
-
-Também é possível testar o Bean Validation.
-
-Por exemplo, enviar:
-
-```json
-{
-  "nome": "",
-  "idade": -5,
-  "tamanho": -10
-}
-```
-
-A API deverá rejeitar os dados devido às regras de validação.
-
-Outro exemplo para cuidador:
-
-```json
-{
-  "nome": "João",
-  "email": "email-invalido"
-}
-```
-
-O campo `email` será rejeitado pela validação `@Email`.
-
----
-
-# 📊 Códigos HTTP utilizados
-
-A API utiliza códigos HTTP apropriados para cada operação.
-
-| Código            | Significado                      | Situação                          |
-| ----------------- | -------------------------------- | --------------------------------- |
-| `200 OK`          | Requisição realizada com sucesso | GET e PUT                         |
-| `201 CREATED`     | Recurso criado                   | POST                              |
-| `204 NO CONTENT`  | Recurso excluído                 | DELETE                            |
-| `400 BAD REQUEST` | Dados inválidos                  | Validação ou parâmetros inválidos |
-| `404 NOT FOUND`   | Recurso não encontrado           | ID ou busca inexistente           |
-
----
-
-# 🔍 Consultas personalizadas
-
-Cada entidade possui pelo menos uma consulta personalizada implementada no Repository.
-
-### Peixe
-
-```java
-findByNomeIgnoreCase(String nome)
-```
-
-Endpoint:
-
-```http
-GET /peixes/buscar?nome=Nemo
-```
-
-### Espécie
-
-```java
-findByNomeIgnoreCase(String nome)
-```
-
-Endpoint:
-
-```http
-GET /especies/buscar?nome=Peixe-palhaço
-```
-
-### Aquário
-
-```java
-findByNomeIgnoreCase(String nome)
-```
-
-Endpoint:
-
-```http
-GET /aquarios/buscar?nome=Aquário Principal
-```
-
-### Cuidador
-
-```java
-findByEmailIgnoreCase(String email)
-```
-
-Endpoint:
-
-```http
-GET /cuidadores/buscar?email=joao@email.com
-```
-
-### Alimentação
-
-```java
-findByNomeIgnoreCase(String nome)
-```
-
-Endpoint:
-
-```http
-GET /alimentacoes/buscar?nome=Ração Tropical
-```
-
----
-
-# 📌 Resumo dos endpoints
-
-| Entidade    | GET lista       | GET por ID           | POST            | PUT                  | DELETE               | Busca                  |
-| ----------- | --------------- | -------------------- | --------------- | -------------------- | -------------------- | ---------------------- |
-| Peixe       | `/peixes`       | `/peixes/{id}`       | `/peixes`       | `/peixes/{id}`       | `/peixes/{id}`       | `/peixes/buscar`       |
-| Espécie     | `/especies`     | `/especies/{id}`     | `/especies`     | `/especies/{id}`     | `/especies/{id}`     | `/especies/buscar`     |
-| Aquário     | `/aquarios`     | `/aquarios/{id}`     | `/aquarios`     | `/aquarios/{id}`     | `/aquarios/{id}`     | `/aquarios/buscar`     |
-| Cuidador    | `/cuidadores`   | `/cuidadores/{id}`   | `/cuidadores`   | `/cuidadores/{id}`   | `/cuidadores/{id}`   | `/cuidadores/buscar`   |
-| Alimentação | `/alimentacoes` | `/alimentacoes/{id}` | `/alimentacoes` | `/alimentacoes/{id}` | `/alimentacoes/{id}` | `/alimentacoes/buscar` |
-
-Ao todo, são **30 endpoints**:
-
-```text
-5 entidades × 6 endpoints = 30 endpoints
-```
-
----
-
-# 🎓 Requisitos atendidos
-
-O projeto foi estruturado para atender aos requisitos da atividade.
-
-### Spring Boot
-
-A aplicação utiliza Spring Boot para construção da API REST.
-
-### Java 17+
-
-O projeto utiliza **Java 25**.
-
-### Maven
-
-O gerenciamento das dependências é feito pelo Maven através do `pom.xml`.
-
-### H2
-
-Banco de dados H2 em memória.
-
-### Spring Data JPA
-
-Os repositories utilizam `JpaRepository`.
-
-### Cinco entidades
-
-```text
-Peixe
-Especie
-Aquario
-Cuidador
-Alimentacao
-```
-
-### Relacionamentos
-
-**One-to-One:**
-
-```text
-Aquario → Cuidador
-```
-
-**One-to-Many:**
-
-```text
-Especie → Peixe
-Aquario → Peixe
-```
-
-**Many-to-Many:**
-
-```text
-Peixe ↔ Alimentacao
-```
-
-### Bean Validation
-
-Utilização de:
-
-```text
-@NotBlank
-@NotNull
-@Size
-@Min
-@Positive
-@Email
-```
-
-### Enum
-
-```text
-TipoAlimentacao
-```
-
-### CRUD
-
-Todas as cinco entidades possuem:
-
-```text
-CREATE
-READ
-UPDATE
-DELETE
-```
-
-### Paginação
-
-Os endpoints de listagem utilizam:
-
-```java
-Pageable
-```
-
-### Consultas personalizadas
-
-Cada entidade possui pelo menos uma consulta personalizada no Repository.
-
-### HTTP Status
-
-São utilizados códigos apropriados como:
-
-```text
-200
-201
-204
-400
-404
-```
-
-### Swagger / OpenAPI
-
-A API possui documentação através do Springdoc OpenAPI e Swagger UI.
-
-### HATEOAS
-
-Os recursos retornam links através de:
-
-```text
-EntityModel
-PagedModel
-```
-
-Incluindo links como:
-
-```text
-self
-update
-delete
-```
-
----
-
-# 👨‍💻 Autor
-
-Projeto acadêmico desenvolvido para demonstrar a construção de uma API REST utilizando Java e Spring Boot.
-
----
-
-# 📄 Licença
-
-Projeto desenvolvido para fins acadêmicos e de estudo.
+Projeto acadêmico desenvolvido para a disciplina de Desenvolvimento de APIs com Spring Boot.

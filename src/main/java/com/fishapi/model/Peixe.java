@@ -14,25 +14,31 @@ public class Peixe {
     private Long id;
 
     @NotBlank(message = "O nome do peixe é obrigatório")
-    @Size(min = 2, max = 100)
+    @Size(min = 2, max = 100, message = "O nome do peixe deve ter entre 2 e 100 caracteres")
+    @Column(nullable = false, length = 100)
     private String nome;
 
     @NotNull(message = "A idade é obrigatória")
     @Min(value = 0, message = "A idade não pode ser negativa")
+    @Column(nullable = false)
     private Integer idade;
 
     @NotNull(message = "O tamanho é obrigatório")
     @Positive(message = "O tamanho deve ser maior que zero")
+    @Column(nullable = false)
     private Double tamanho;
 
+    // One-to-Many (lado "muitos"): várias espécies -> vários peixes
     @ManyToOne
     @JoinColumn(name = "especie_id")
     private Especie especie;
 
+    // One-to-Many (lado "muitos"): um aquário -> vários peixes
     @ManyToOne
     @JoinColumn(name = "aquario_id")
     private Aquario aquario;
 
+    // Many-to-Many: um peixe recebe várias alimentações e vice-versa
     @ManyToMany
     @JoinTable(
             name = "peixe_alimentacao",

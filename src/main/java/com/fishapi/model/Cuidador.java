@@ -13,12 +13,18 @@ public class Cuidador {
     private Long id;
 
     @NotBlank(message = "O nome é obrigatório")
-    @Size(min = 3, max = 100)
+    @Size(min = 3, max = 100, message = "O nome deve ter entre 3 e 100 caracteres")
+    @Column(nullable = false, length = 100)
     private String nome;
 
     @NotBlank(message = "O email é obrigatório")
     @Email(message = "Informe um email válido")
+    @Column(nullable = false, unique = true, length = 150)
     private String email;
+
+    // Lado inverso do One-to-One com Aquario
+    @OneToOne(mappedBy = "cuidador")
+    private Aquario aquario;
 
     public Cuidador() {
     }
@@ -45,5 +51,13 @@ public class Cuidador {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public Aquario getAquario() {
+        return aquario;
+    }
+
+    public void setAquario(Aquario aquario) {
+        this.aquario = aquario;
     }
 }

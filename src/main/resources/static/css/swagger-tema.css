@@ -1,0 +1,165 @@
+/*
+ * Tema laranja e azul do Swagger da HookFishing API (/swagger-ui/index.html).
+ * Carregado pela página src/main/resources/swagger/index.html, que o SwaggerUiFilter entrega
+ * no lugar da página padrão do springdoc.
+ */
+:root {
+    --hf-azul: #0b3954;
+    --hf-azul-medio: #1f5f99;
+    --hf-azul-claro: #dfeaf6;
+    --hf-azul-fundo: #edf3f9;
+    --hf-laranja: #f07c1f;
+    --hf-laranja-escuro: #c2560c;
+    --hf-laranja-claro: #fde9d7;
+    --hf-texto: #1c2733;
+    --hf-cinza: #5d6b78;
+    --hf-borda: #c9d8e6;
+}
+
+html { box-sizing: border-box; overflow-y: scroll; }
+*, *:before, *:after { box-sizing: inherit; }
+body { margin: 0; background: var(--hf-azul-fundo); }
+.swagger-ui .wrapper { max-width: 1460px; }
+.swagger-ui .info { margin: 30px 0 20px; }
+.swagger-ui .info .description p, .swagger-ui .info .description li { font-size: 14px; line-height: 1.55; }
+.swagger-ui .info .description p strong:only-child { display: block; margin-top: 18px; font-size: 16px; color: var(--hf-azul); }
+
+/* A barra superior (logo do Swagger e "Select a definition") fica no visual padrão do Swagger. */
+
+/* ---------- Informações gerais ---------- */
+.swagger-ui { color: var(--hf-texto); }
+.swagger-ui .info .title { color: var(--hf-azul); }
+.swagger-ui .info .title small { background: var(--hf-laranja); }
+.swagger-ui .info .title small.version-stamp { background: var(--hf-azul-medio); }
+.swagger-ui .info a, .swagger-ui .markdown a, .swagger-ui .renderedMarkdown a { color: var(--hf-azul-medio); }
+.swagger-ui .info h2, .swagger-ui .info h3 { color: var(--hf-azul); border-bottom: 1px solid var(--hf-borda); padding-bottom: 4px; margin-top: 26px; }
+.swagger-ui .info table { border-collapse: collapse; margin: 8px 0 14px; }
+.swagger-ui .info table th { background: var(--hf-azul); color: #fff; padding: 6px 10px; text-align: left; }
+.swagger-ui .info table td { border-bottom: 1px solid var(--hf-borda); padding: 6px 10px; }
+
+/* Trechos de código no texto (antes roxos) em azul */
+.swagger-ui .markdown code,
+.swagger-ui .renderedMarkdown code,
+.swagger-ui .opblock-tag code,
+.swagger-ui .info code,
+.swagger-ui code {
+    color: var(--hf-azul-medio);
+    background: var(--hf-azul-claro);
+    border-radius: 4px;
+    padding: 1px 5px;
+}
+.swagger-ui .opblock-body pre.microlight code,
+.swagger-ui .highlight-code code,
+.swagger-ui pre code { color: inherit; background: transparent; padding: 0; }
+
+/* ---------- Autorização e botões ---------- */
+.swagger-ui .scheme-container { background: var(--hf-azul-claro); box-shadow: none; border: 1px solid var(--hf-borda); border-radius: 10px; margin: 0 0 18px; }
+.swagger-ui .btn.authorize { color: var(--hf-laranja-escuro); border-color: var(--hf-laranja); background: #fff; }
+.swagger-ui .btn.authorize svg { fill: var(--hf-laranja); }
+.swagger-ui .btn.authorize:hover { background: var(--hf-laranja-claro); }
+.swagger-ui .btn.execute { background: var(--hf-laranja); border-color: var(--hf-laranja); color: #fff; }
+.swagger-ui .btn.execute:hover { background: var(--hf-laranja-escuro); }
+.swagger-ui .btn.try-out__btn { border-color: var(--hf-azul-medio); color: var(--hf-azul-medio); background: #fff; }
+.swagger-ui .btn.try-out__btn.cancel { border-color: var(--hf-laranja-escuro); color: var(--hf-laranja-escuro); }
+.swagger-ui .btn.btn-clear { border-color: var(--hf-azul-medio); color: var(--hf-azul-medio); }
+.swagger-ui .auth-btn-wrapper .btn-done { border-color: var(--hf-azul-medio); color: var(--hf-azul-medio); }
+.swagger-ui .dialog-ux .modal-ux { background: var(--hf-azul-fundo); }
+.swagger-ui .dialog-ux .modal-ux-header { background: var(--hf-azul); }
+.swagger-ui .dialog-ux .modal-ux-header h3 { color: #fff; }
+.swagger-ui .dialog-ux .modal-ux-header .close-modal svg { fill: #fff; }
+
+/* ---------- Seções (tags) ---------- */
+.swagger-ui .opblock-tag { color: var(--hf-azul); border-bottom: 2px solid var(--hf-borda); }
+.swagger-ui .opblock-tag:hover { background: var(--hf-azul-claro); }
+.swagger-ui .opblock-tag small { color: var(--hf-cinza); }
+.swagger-ui .opblock-tag svg { fill: var(--hf-azul); }
+
+/* ---------- Endpoints: tons de azul (GET, PUT) e laranja (POST, DELETE) ---------- */
+.swagger-ui .opblock { border-radius: 8px; box-shadow: none; }
+.swagger-ui .opblock .opblock-summary-method { border-radius: 5px; min-width: 80px; text-shadow: none; }
+.swagger-ui .opblock .opblock-section-header { background: rgba(255, 255, 255, .45); box-shadow: none; border-bottom: 1px solid var(--hf-borda); }
+.swagger-ui .opblock .opblock-summary-path,
+.swagger-ui .opblock .opblock-summary-description { color: var(--hf-texto); }
+
+.swagger-ui .opblock.opblock-get { border-color: var(--hf-azul-medio); background: #dce9f6; }
+.swagger-ui .opblock.opblock-get .opblock-summary { border-color: var(--hf-azul-medio); }
+.swagger-ui .opblock.opblock-get .opblock-summary-method { background: var(--hf-azul-medio); }
+.swagger-ui .opblock.opblock-get .tab-header .tab-item.active h4 span:after { background: var(--hf-azul-medio); }
+
+.swagger-ui .opblock.opblock-put { border-color: var(--hf-azul); background: #d7e1ec; }
+.swagger-ui .opblock.opblock-put .opblock-summary { border-color: var(--hf-azul); }
+.swagger-ui .opblock.opblock-put .opblock-summary-method { background: var(--hf-azul); }
+.swagger-ui .opblock.opblock-put .tab-header .tab-item.active h4 span:after { background: var(--hf-azul); }
+
+.swagger-ui .opblock.opblock-post { border-color: var(--hf-laranja); background: #fde6d2; }
+.swagger-ui .opblock.opblock-post .opblock-summary { border-color: var(--hf-laranja); }
+.swagger-ui .opblock.opblock-post .opblock-summary-method { background: var(--hf-laranja); }
+.swagger-ui .opblock.opblock-post .tab-header .tab-item.active h4 span:after { background: var(--hf-laranja); }
+
+.swagger-ui .opblock.opblock-delete { border-color: var(--hf-laranja-escuro); background: #f9dcc7; }
+.swagger-ui .opblock.opblock-delete .opblock-summary { border-color: var(--hf-laranja-escuro); }
+.swagger-ui .opblock.opblock-delete .opblock-summary-method { background: var(--hf-laranja-escuro); }
+.swagger-ui .opblock.opblock-delete .tab-header .tab-item.active h4 span:after { background: var(--hf-laranja-escuro); }
+
+.swagger-ui .opblock.opblock-patch { border-color: var(--hf-azul-medio); background: #dce9f6; }
+.swagger-ui .opblock.opblock-patch .opblock-summary-method { background: var(--hf-azul-medio); }
+
+/* ---------- Detalhes dos endpoints ---------- */
+.swagger-ui .response-col_status { font-weight: 700; color: var(--hf-azul); }
+.swagger-ui table thead tr td, .swagger-ui table thead tr th { color: var(--hf-azul); border-bottom-color: var(--hf-borda); }
+.swagger-ui .parameter__name.required:after, .swagger-ui .parameter__name.required span { color: var(--hf-laranja-escuro); }
+.swagger-ui .parameter__type, .swagger-ui .prop-format { color: var(--hf-azul-medio); }
+.swagger-ui .parameter__in { color: var(--hf-cinza); }
+.swagger-ui select, .swagger-ui input[type=text], .swagger-ui textarea { border-color: var(--hf-borda); }
+.swagger-ui input[type=text]:focus, .swagger-ui textarea:focus, .swagger-ui select:focus { outline: 2px solid rgba(31, 95, 153, .35); }
+.swagger-ui .responses-inner h4, .swagger-ui .responses-inner h5 { color: var(--hf-azul); }
+
+.swagger-ui .filter-container .operation-filter-input { border: 2px solid var(--hf-borda); border-radius: 8px; background: #fff; }
+.swagger-ui .filter-container .operation-filter-input:focus { border-color: var(--hf-laranja); }
+
+/* ---------- Modelos (schemas) ---------- */
+.swagger-ui section.models { border-color: var(--hf-borda); border-radius: 8px; background: var(--hf-azul-claro); }
+.swagger-ui section.models .model-container { background: rgba(255, 255, 255, .55); }
+.swagger-ui section.models .model-container:hover { background: rgba(255, 255, 255, .85); }
+.swagger-ui section.models h4 { color: var(--hf-azul); }
+.swagger-ui .model-title { color: var(--hf-azul); }
+.swagger-ui .model .property.primitive, .swagger-ui .prop-type { color: var(--hf-azul-medio); }
+
+/* ---------- Janela "Authorize": login com e-mail e senha ---------- */
+/* Campos e textos do OAuth2 que não se aplicam a este login */
+.swagger-ui .auth-container .wrapper:has(> label[for="password_type"]),
+.swagger-ui .auth-container .wrapper:has(> label[for^="client_id"]),
+.swagger-ui .auth-container .wrapper:has(> label[for^="client_secret"]),
+.swagger-ui .auth-container .scope-def,
+.swagger-ui .auth-container p.flow,
+.swagger-ui .auth-container p:has(+ p.flow) { display: none; }
+
+/* Títulos da janela */
+.swagger-ui .dialog-ux .modal-ux-header h3 { font-size: 0 !important; }
+.swagger-ui .dialog-ux .modal-ux-header h3::before { content: "Entrar na API"; font-size: 20px; }
+.swagger-ui .dialog-ux .modal-ux-content .auth-container h4 { font-size: 0 !important; }
+.swagger-ui .dialog-ux .modal-ux-content .auth-container h4 code { display: none; }
+.swagger-ui .auth-container h4:not(:has(code))::before { content: "Login com e-mail e senha"; font-size: 16px; color: var(--hf-azul); }
+.swagger-ui .auth-container h4:has(code)::before { content: "Ou informe uma API Key"; font-size: 16px; color: var(--hf-azul); }
+
+/* Botões */
+.swagger-ui .auth-btn-wrapper .btn { font-size: 0 !important; }
+.swagger-ui .auth-btn-wrapper .btn::before { font-size: 14px; font-weight: 700; }
+.swagger-ui .auth-btn-wrapper .btn.authorize::before { content: "Entrar"; }
+.swagger-ui .auth-btn-wrapper .btn.btn-done::before { content: "Fechar"; }
+.swagger-ui .auth-btn-wrapper .btn[aria-label="Remove authorization"]::before { content: "Sair"; }
+
+/* Rótulos em português */
+.swagger-ui .auth-container label[for="oauth_username"],
+.swagger-ui .auth-container label[for="oauth_password"] { font-size: 0; }
+.swagger-ui .auth-container label[for="oauth_username"]::before { content: "E-mail:"; font-size: 12px; font-weight: 700; }
+.swagger-ui .auth-container label[for="oauth_password"]::before { content: "Senha:"; font-size: 12px; font-weight: 700; }
+.swagger-ui .auth-container label[for="api_key_value"] { font-size: 0; }
+.swagger-ui .auth-container label[for="api_key_value"]::before { content: "API Key:"; font-size: 12px; font-weight: 700; }
+
+.swagger-ui .auth-container { border-bottom: 1px solid var(--hf-borda); }
+.swagger-ui .auth-container h4 { color: var(--hf-azul); }
+.swagger-ui .auth-container input[type=text],
+.swagger-ui .auth-container input[type=password] { border: 1px solid var(--hf-borda); border-radius: 6px; padding: 8px 10px; }
+.swagger-ui .dialog-ux .modal-ux-content .auth-container h6 { font-size: 0 !important; }
+.swagger-ui .dialog-ux .modal-ux-content .auth-container h6::before { content: "Conectado"; font-size: 12px; color: #1f8a4c; }

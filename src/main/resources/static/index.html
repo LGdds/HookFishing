@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HookFishing</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23ff5a36'/%3E%3Cpath d='M7 16c3-4.5 7-6 11-4l5-3v14l-5-3c-4 2-8 .5-11-4z' fill='%23fff'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- ============ LOGIN E CADASTRO ============ -->
+<section id="tela-login" class="acesso" hidden>
+    <div class="acesso__lado">
+        <div class="marca marca--clara"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#ff5a36"/><path d="M7 16c3-4.5 7-6 11-4l5-3v14l-5-3c-4 2-8 .5-11-4z" fill="#fff"/><circle cx="12" cy="15" r="1.3" fill="#0b3954"/></svg> HookFishing</div>
+        <div class="acesso__texto">
+            <h1>Gestão de aquários</h1>
+            <p>Cadastro de peixes, espécies, aquários, cuidadores e alimentação em um só lugar.</p>
+        </div>
+        <p class="acesso__rodape">Projeto acadêmico · API REST com Spring Boot</p>
+    </div>
+
+    <div class="acesso__formularios">
+        <!-- Login -->
+        <form id="form-login" class="formulario" novalidate>
+            <h2>Entrar</h2>
+            <p class="formulario__sub">Use o e-mail e a senha da sua conta.</p>
+
+            <div class="campo">
+                <label for="login-email">E-mail</label>
+                <input id="login-email" type="email" autocomplete="username" required>
+            </div>
+            <div class="campo">
+                <label for="login-senha">Senha</label>
+                <input id="login-senha" type="password" autocomplete="current-password" required>
+            </div>
+
+            <p id="login-erro" class="formulario__erro" role="alert" hidden></p>
+            <button class="btn btn--primario btn--bloco" type="submit">Entrar</button>
+
+            <p class="formulario__troca">Ainda não tem conta? <a href="#cadastro" data-ir="cadastro">Cadastre-se</a></p>
+
+            <details class="contas-teste">
+                <summary>Contas de teste</summary>
+                <table>
+                    <tbody>
+                    <tr><td>admin@hookfishing.com</td><td>admin123</td><td>ADMIN</td></tr>
+                    <tr><td>gerente@hookfishing.com</td><td>gerente123</td><td>GERENTE</td></tr>
+                    <tr><td>biologo@hookfishing.com</td><td>biologo123</td><td>BIOLOGO</td></tr>
+                    <tr><td>cuidador@hookfishing.com</td><td>cuidador123</td><td>CUIDADOR</td></tr>
+                    <tr><td>visitante@hookfishing.com</td><td>visitante123</td><td>VISITANTE</td></tr>
+                    </tbody>
+                </table>
+                <p>Clique em uma linha para preencher o formulário.</p>
+            </details>
+        </form>
+
+        <!-- Cadastro -->
+        <form id="form-cadastro" class="formulario" novalidate hidden>
+            <h2>Criar conta</h2>
+            <p class="formulario__sub">Contas novas começam com acesso de visitante. Um administrador pode ampliar suas permissões.</p>
+
+            <div class="campo">
+                <label for="cadastro-nome">Nome completo</label>
+                <input id="cadastro-nome" type="text" autocomplete="name" minlength="3" maxlength="100" required>
+            </div>
+            <div class="campo">
+                <label for="cadastro-email">E-mail</label>
+                <input id="cadastro-email" type="email" autocomplete="email" required>
+            </div>
+            <div class="campo">
+                <label for="cadastro-senha">Senha</label>
+                <input id="cadastro-senha" type="password" autocomplete="new-password" minlength="6" maxlength="72" required>
+                <span class="ajuda">Mínimo de 6 caracteres.</span>
+            </div>
+            <div class="campo">
+                <label for="cadastro-confirmacao">Confirme a senha</label>
+                <input id="cadastro-confirmacao" type="password" autocomplete="new-password" required>
+            </div>
+
+            <p id="cadastro-erro" class="formulario__erro" role="alert" hidden></p>
+            <button class="btn btn--primario btn--bloco" type="submit">Criar conta</button>
+
+            <p class="formulario__troca">Já tem conta? <a href="#login" data-ir="login">Entrar</a></p>
+        </form>
+    </div>
+</section>
+
+<!-- ============ APLICAÇÃO ============ -->
+<div id="tela-app" class="app" hidden>
+    <header class="topo">
+        <div class="marca"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#ff5a36"/><path d="M7 16c3-4.5 7-6 11-4l5-3v14l-5-3c-4 2-8 .5-11-4z" fill="#fff"/><circle cx="12" cy="15" r="1.3" fill="#0b3954"/></svg> HookFishing</div>
+
+        <div class="topo__info">
+            <div class="limite" title="Rate limiting: requisições restantes na janela atual">
+                <span class="limite__rotulo">Rate limit</span>
+                <div class="limite__barra"><div id="limite-preenchido" class="limite__preenchido"></div></div>
+                <span id="limite-texto" class="limite__texto">–</span>
+            </div>
+            <div class="usuario">
+                <span id="usuario-nome" class="usuario__nome"></span>
+                <span id="usuario-papel" class="selo"></span>
+            </div>
+            <a class="btn btn--fantasma" id="link-swagger" href="/swagger-ui/index.html" target="_blank" rel="noopener">Documentação</a>
+            <button id="btn-sair" class="btn btn--fantasma" type="button">Sair</button>
+        </div>
+    </header>
+
+    <div id="aviso-429" class="aviso-429" hidden role="alert"></div>
+
+    <nav class="abas" id="abas" aria-label="Seções"></nav>
+
+    <main class="conteudo">
+        <section id="painel-entidade" class="painel" hidden>
+            <div class="painel__cabecalho">
+                <div>
+                    <h1 id="entidade-titulo"></h1>
+                    <p id="entidade-descricao" class="painel__descricao"></p>
+                </div>
+                <button id="btn-novo" class="btn btn--primario" type="button">+ Novo</button>
+            </div>
+
+            <div class="barra">
+                <form id="form-busca" class="barra__busca">
+                    <label id="busca-rotulo" for="busca-valor"></label>
+                    <span id="busca-campo"></span>
+                    <button class="btn" type="submit">Buscar</button>
+                    <button id="btn-limpar" class="btn btn--fantasma" type="button" hidden>Limpar</button>
+                </form>
+
+                <div class="barra__opcoes">
+                    <label>Ordenar
+                        <select id="ordenar"></select>
+                    </label>
+                    <label>Por página
+                        <select id="tamanho">
+                            <option>5</option><option selected>10</option><option>20</option><option>50</option>
+                        </select>
+                    </label>
+                    <div id="versao" class="versao" hidden title="Versionamento via header X-API-Version">
+                        <span>X-API-Version</span>
+                        <button type="button" data-versao="1" class="versao__btn ativo">v1</button>
+                        <button type="button" data-versao="2" class="versao__btn">v2</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tabela-wrap">
+                <table class="tabela">
+                    <thead id="tabela-cabecalho"></thead>
+                    <tbody id="tabela-corpo"></tbody>
+                </table>
+            </div>
+
+            <div class="paginacao">
+                <span id="paginacao-info"></span>
+                <div class="paginacao__botoes">
+                    <button class="btn btn--pequeno" data-pagina="first" type="button">« Primeira</button>
+                    <button class="btn btn--pequeno" data-pagina="prev" type="button">‹ Anterior</button>
+                    <button class="btn btn--pequeno" data-pagina="next" type="button">Próxima ›</button>
+                    <button class="btn btn--pequeno" data-pagina="last" type="button">Última »</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="painel-testes" class="painel" hidden></section>
+    </main>
+
+    <aside class="log">
+        <div class="log__cabecalho">
+            <h2>Requisições</h2>
+            <button id="btn-limpar-log" class="btn btn--fantasma btn--pequeno" type="button">Limpar</button>
+        </div>
+        <ol id="log-lista" class="log__lista"></ol>
+    </aside>
+</div>
+
+<!-- ============ MODAL ============ -->
+<dialog id="modal" class="modal">
+    <form id="modal-form" method="dialog" novalidate>
+        <header class="modal__cabecalho">
+            <h2 id="modal-titulo"></h2>
+            <button type="button" class="modal__fechar" data-fechar aria-label="Fechar">×</button>
+        </header>
+        <div id="modal-corpo" class="modal__corpo"></div>
+        <div id="modal-erro" class="modal__erro" hidden></div>
+        <footer class="modal__rodape">
+            <span id="modal-idem" class="modal__idem"></span>
+            <div>
+                <button type="button" class="btn btn--fantasma" data-fechar>Cancelar</button>
+                <button type="submit" id="modal-salvar" class="btn btn--primario">Salvar</button>
+            </div>
+        </footer>
+    </form>
+</dialog>
+
+<div id="toasts" class="toasts" aria-live="polite"></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

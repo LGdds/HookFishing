@@ -16,13 +16,17 @@ public class Alimentacao {
     private Long id;
 
     @NotBlank(message = "O nome da alimentação é obrigatório")
-    @Size(min = 3, max = 100)
+    @Size(min = 3, max = 100, message = "O nome da alimentação deve ter entre 3 e 100 caracteres")
+    @Column(nullable = false, unique = true, length = 100)
     private String nome;
 
+    // Enum TipoAlimentacao
     @NotNull(message = "O tipo de alimentação é obrigatório")
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
     private TipoAlimentacao tipo;
 
+    // Lado inverso do Many-to-Many com Peixe
     @ManyToMany(mappedBy = "alimentacoes")
     private List<Peixe> peixes = new ArrayList<>();
 
