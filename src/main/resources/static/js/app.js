@@ -15,7 +15,7 @@
 // Servido pela própria API (localhost:8080 ou Render, https sem porta): caminhos relativos.
 // Aberto como arquivo ou num servidor de desenvolvimento (Live Server, Vite...): chama a API em localhost:8080.
 // Para apontar para outra API, defina window.HOOKFISHING_API antes de carregar este script.
-const PORTAS_DESENVOLVIMENTO = ['3000', '5173', '5500', '63342'];
+const PORTAS_DESENVOLVIMENTO = ['3000', '5173', '5500', '63342', '8080'];
 const API = window.HOOKFISHING_API
     ?? (location.protocol === 'file:' || PORTAS_DESENVOLVIMENTO.includes(location.port) ? 'http://localhost:8080' : '');
 
