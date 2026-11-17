@@ -34,11 +34,13 @@ public class ApiKeyService {
 
     private final ApiKeyRepository repository;
     private final UsuarioRepository usuarioRepository;
+    private final CifraChaves cifra;
     private final SecureRandom random = new SecureRandom();
 
-    public ApiKeyService(ApiKeyRepository repository, UsuarioRepository usuarioRepository) {
+    public ApiKeyService(ApiKeyRepository repository, UsuarioRepository usuarioRepository, CifraChaves cifra) {
         this.repository = repository;
         this.usuarioRepository = usuarioRepository;
+        this.cifra = cifra;
     }
 
     /**
@@ -53,7 +55,7 @@ public class ApiKeyService {
         return repository.findByHashChave(Hashes.sha256(chave.trim()))
                 .filter(ApiKey::isAtiva)
                 .map(apiKey -> {
-                    apiKey.setUltimoUsoEm(Instant.now().truncatedTo(ChronoUnit.SECONDS));
+                    repository.registrarUso(apiKey.getId(), Instant.now().truncatedTo(ChronoUnit.SECONDS));
                     return paraCliente(apiKey);
                 });
     }
@@ -67,7 +69,7 @@ public class ApiKeyService {
         if (!apiKey.isAtiva()) {
             throw new NaoAutenticadoException("Esta API Key foi desativada. Solicite uma nova chave ao administrador.");
         }
-        apiKey.setUltimoUsoEm(Instant.now().truncatedTo(ChronoUnit.SECONDS));
+        repository.registrarUso(apiKey.getId(), Instant.now().truncatedTo(ChronoUnit.SECONDS));
         return paraCliente(apiKey);
     }
 
@@ -150,6 +152,12 @@ public class ApiKeyService {
         return buscarPorId(ContextoRequisicao.clienteAtual().apiKeyId());
     }
 
+    /** Gera um novo valor para a chave usada na requisição; o valor anterior deixa de funcionar na hora. */
+    @Transactional
+    public ApiKeyResponse regenerarMinhaChave() {
+        return regenerar(ContextoRequisicao.clienteAtual().apiKeyId());
+    }
+
     /** Cria uma chave com valor fixo (usada para as chaves de demonstração carregadas na inicialização). */
     @Transactional
     public void garantirChave(String nome, String email, PapelAcesso papel, Plano plano, String chave) {
@@ -181,11 +189,20 @@ public class ApiKeyService {
         return repository.save(apiKey);
     }
 
-    /** Gera um novo valor para a chave (usado no login) e devolve o valor em texto. */
+    /**
+     * Chave devolvida no login: SEMPRE o mesmo valor do usuário, para que entrar no Swagger ou em outra aba não
+     * derrube as sessões abertas. Só gera um valor novo se o cifrado não puder ser lido (ex.: segredo trocado).
+     */
     @Transactional
-    public String rotacionar(ApiKey apiKey) {
-        String chave = gerarChave();
-        aplicarChave(apiKey, chave);
+    public String chaveParaLogin(Long apiKeyId) {
+        ApiKey apiKey = buscarEntidade(apiKeyId);
+        String chave = cifra.decifrar(apiKey.getChaveCifrada())
+                .filter(valor -> Hashes.sha256(valor).equals(apiKey.getHashChave()))
+                .orElseGet(() -> {
+                    String nova = gerarChave();
+                    aplicarChave(apiKey, nova);
+                    return nova;
+                });
         apiKey.setUltimoUsoEm(Instant.now().truncatedTo(ChronoUnit.SECONDS));
         repository.save(apiKey);
         return chave;
@@ -198,6 +215,7 @@ public class ApiKeyService {
 
     private void aplicarChave(ApiKey apiKey, String chave) {
         apiKey.setHashChave(Hashes.sha256(chave));
+        apiKey.setChaveCifrada(cifra.cifrar(chave));
         apiKey.setPrefixo(chave.substring(0, Math.min(TAMANHO_PREFIXO, chave.length())));
     }
 

@@ -26,7 +26,7 @@ import java.util.List;
  *   2. ApiKeyInterceptor      -> 401 sem chave / chave inválida, 403 sem permissão
  *   3. ApiVersionInterceptor  -> 400 se X-API-Version não for suportada
  *
- * Rotas públicas (sem API Key, mas com rate limiting): /auth/** e GET /planos.
+ * Rotas públicas (sem API Key, mas com rate limiting): /auth/**, GET /planos e GET /cors.
  * O front-end, o Swagger, /v3/api-docs e o console do H2 ficam fora dessas regras.
  */
 @Configuration
@@ -43,7 +43,7 @@ public class WebConfig implements WebMvcConfigurer {
     };
 
     /** Rotas públicas: sem API Key, mas com rate limiting. */
-    static final String[] ROTAS_PUBLICAS = {"/auth", "/auth/**", "/planos"};
+    static final String[] ROTAS_PUBLICAS = {"/auth", "/auth/**", "/planos", "/cors"};
 
     private final RateLimitInterceptor rateLimitInterceptor;
     private final ApiKeyInterceptor apiKeyInterceptor;
@@ -66,7 +66,15 @@ public class WebConfig implements WebMvcConfigurer {
      * Requisições da mesma origem (front-end e Swagger servidos pela API) passam direto: veja FiltroCors.
      */
     @Bean
-    public FiltroCors corsFilter(
+    public FiltroCors corsFilter(CorsConfiguration configuracaoCors) {
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuracaoCors);
+        return new FiltroCors(source);
+    }
+
+    /** Configuração de CORS, compartilhada pelo FiltroCors e pelo GET /cors (que verifica origens). */
+    @Bean
+    public CorsConfiguration configuracaoCors(
             @Value("${hookfishing.cors.origens-permitidas}") String origensPermitidas,
             @Value("${hookfishing.cors.url-publica:}") String urlPublica) {
         CorsConfiguration config = new CorsConfiguration();
@@ -98,11 +106,7 @@ public class WebConfig implements WebMvcConfigurer {
                 IdempotenciaService.HEADER_REPETIDA));
         config.setAllowCredentials(false);
         config.setMaxAge(Duration.ofHours(1));
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
-
-        return new FiltroCors(source);
+        return config;
     }
 
     @Override

@@ -53,16 +53,17 @@ Página em HTML, CSS e JavaScript puro, sem dependências, em `src/main/resource
 | **CRUD** das 5 entidades | Uma aba por entidade: tabela paginada, ordenação, tamanho da página, busca personalizada e formulário de cadastro/edição com os relacionamentos (selects e checkboxes) |
 | **Idempotência** | Cada formulário de cadastro gera uma `X-Idempotency-Key` (exibida no rodapé). Clicar em Salvar de novo reenvia a mesma chave, e a API não duplica o registro |
 | **Rate limit** | Barra no topo com `X-RateLimit-Remaining / X-RateLimit-Limit` e o plano da conta. Ao receber 429, aparece um aviso com contagem regressiva do `Retry-After`; se a chave for bloqueada por insistir, o aviso fica vermelho e mostra o horário de liberação (`X-RateLimit-Blocked-Until`) |
+| **Minha conta** | Clique no seu nome no topo: dados da conta, a sua API Key (mostrar, copiar e gerar uma nova com `POST /api-keys/me/regenerar`), exemplo de uso, consumo do plano e a matriz de permissões do seu papel |
 | **Planos** | Aba com os três planos e preços (`GET /planos`), o consumo atual da chave (`GET /planos/limites`), as regras de bloqueio e o botão de contratar (`PUT /planos/assinatura`, simulação) |
 | **Versionamento** | Botões **v1 / v2** na aba Peixes, que enviam o header `X-API-Version` |
 | **Erros** | Mensagens do `ErroResponse` em avisos, com os campos inválidos destacados no formulário |
 | **API Keys** | Gerar (exibe o valor uma única vez, com botão de copiar), editar papel e status, regenerar e revogar |
-| **Testes da Parte 2** | Tabela de cenários por requisito (4.1 a 5), incluindo planos, estouro do limite e bloqueio, com requisição, status esperado e resultado (Passou/Falhou), detalhes da resposta e botão "Executar todos" |
+| **Testes** | Tabela de cenários por requisito (4.1 a 5), incluindo planos, estouro do limite e bloqueio, com requisição, status esperado e resultado (Passou/Falhou), detalhes da resposta e botão "Executar todos" |
 | **Painel de requisições** | Lateral com cada chamada feita: método, rota, status e os headers da Parte 2 enviados e recebidos |
 
 **CORS na prática:** o front-end também funciona aberto em outra origem permitida. Por exemplo, abrindo `index.html` pelo Live Server do VS Code (porta 5500), ele chama a API em `http://localhost:8080` e o CORS libera a origem. Em uma porta fora da lista, o navegador bloqueia as chamadas.
 
-**Endereço da API:** servido pela própria API (localhost:8080 ou Render), o front-end usa caminhos relativos. Aberto como arquivo ou num servidor de desenvolvimento (portas 3000, 5173, 5500 e 63342), chama `http://localhost:8080`. Para apontar para outro endereço, defina `window.HOOKFISHING_API = 'https://...'` antes de carregar `js/app.js`.
+**Endereço da API:** servido pela própria API (localhost:8080 ou Render), o front-end usa o mesmo endereço da página. Aberto direto no navegador (duplo clique em `src/main/resources/static/index.html`), pelo IntelliJ ou pelo Live Server, a tela de login mostra o bloco **Servidor da API** para escolher entre **Local** (`http://localhost:8080`), **Render** (`https://hookfishing.onrender.com`) ou outro endereço; a escolha fica salva no navegador. O CORS libera essas origens, incluindo `null`, que é a origem enviada pelo navegador para arquivos abertos do disco.
 
 ---
 
@@ -149,6 +150,8 @@ Planos e limites:
 | GET | `/planos` | Tabela de planos e preços (pública) |
 | GET | `/planos/limites` | Plano da chave, fichas restantes e regras de bloqueio |
 | PUT | `/planos/assinatura` | Troca o plano da chave em uso (simulação, sem cobrança) |
+| POST | `/planos/limites/simulacao?requisicoes=30` | Dispara uma rajada contra o limite da chave (mostra o 429 e o bloqueio pelo Swagger) |
+| GET | `/cors?origem=http://localhost:5500` | Política de CORS e verificação de uma origem (pública) |
 
 Gerenciamento de API Keys (apenas ADMIN, exceto `/me`):
 
@@ -202,7 +205,7 @@ Todo **POST de cadastro** (inclusive `POST /auth/cadastro`) exige o header `X-Id
 ### 4.2 Autenticação com chave de API — `X-API-Key`
 
 - Todas as rotas da API exigem `X-API-Key`. Ficam livres: `/auth/cadastro`, `/auth/login`, o front-end, o Swagger, `/v3/api-docs` e o H2 Console.
-- **Usuários:** `POST /auth/cadastro` cria a conta (senha salva com hash PBKDF2) e uma API Key própria com o papel `VISITANTE`. `POST /auth/login` confere e-mail e senha e devolve um novo valor para essa chave; cada login invalida o anterior. Um `ADMIN` promove o usuário alterando o papel da chave em `PUT /api-keys/{id}`. Chaves de usuários não podem ser excluídas, apenas desativadas.
+- **Usuários:** `POST /auth/cadastro` cria a conta (senha salva com hash PBKDF2) e uma API Key própria com o papel `VISITANTE`. `POST /auth/login` confere e-mail e senha e devolve a API Key do usuário. Cada login devolve **a mesma chave** (guardada com hash para autenticar e cifrada com AES-GCM para poder ser devolvida), então entrar no Swagger não derruba a sessão do front-end. Para trocar a chave, use `POST /api-keys/me/regenerar` (aba **Minha conta**). Um `ADMIN` promove o usuário alterando o papel da chave em `PUT /api-keys/{id}`. Chaves de usuários não podem ser excluídas, apenas desativadas.
 - Cada chave tem um **papel** inspirado na equipe de um aquário, com permissões diferentes em cada recurso:
 
 | Papel | Quem é | Peixes | Alimentações | Espécies | Aquários | Cuidadores | API Keys |

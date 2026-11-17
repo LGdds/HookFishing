@@ -144,7 +144,8 @@ public class AuthController {
                     Confere as credenciais e devolve a **API Key** do usuário, que o cliente deve enviar no header \
                     `X-API-Key`. A resposta também traz o papel e as permissões do usuário.
 
-                    Cada login gera um novo valor de chave e invalida o anterior.""")
+                    Cada login devolve **a mesma chave** do usuário, então entrar no Swagger não derruba a sessão \
+                    aberta no front-end. Para trocar a chave, use `POST /api-keys/me/regenerar`.""")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Login realizado",
                     content = @Content(mediaType = "application/hal+json", schema = @Schema(implementation = LoginResponse.class),

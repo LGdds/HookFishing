@@ -158,6 +158,20 @@ public class ApiKeyController {
         return ResponseEntity.ok(modelo(service.minhaChave()));
     }
 
+    @Operation(summary = "Gerar um novo valor para a minha API Key",
+            description = """
+                    Troca o valor da chave usada na requisição (por exemplo, se ela vazou). O valor novo aparece \
+                    **somente nesta resposta**; o anterior deixa de funcionar imediatamente. Papel, plano e permissões \
+                    continuam os mesmos. Disponível para **qualquer papel**.""")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Novo valor gerado",
+                    content = @Content(mediaType = "application/hal+json", schema = @Schema(implementation = ApiKeyResponse.class)))
+    })
+    @PostMapping("/me/regenerar")
+    public ResponseEntity<EntityModel<ApiKeyResponse>> regenerarMinhaChave() {
+        return ResponseEntity.ok(modelo(service.regenerarMinhaChave()));
+    }
+
     @Operation(summary = "Buscar API Key por ID (ADMIN)",
             description = "Exemplo: `GET /api-keys/4` → chave CUIDADOR da Equipe de Cuidadores.")
     @ApiResponses({

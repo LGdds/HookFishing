@@ -37,6 +37,10 @@ public class ApiKey {
     @Column(nullable = false, length = 20)
     private String prefixo;
 
+    /** Valor da chave cifrado com AES-GCM, para o login devolver sempre a mesma chave (veja CifraChaves). */
+    @Column(name = "chave_cifrada", length = 200)
+    private String chaveCifrada;
+
     @Column(nullable = false)
     private boolean ativa = true;
 
@@ -102,6 +106,14 @@ public class ApiKey {
 
     public void setPrefixo(String prefixo) {
         this.prefixo = prefixo;
+    }
+
+    public String getChaveCifrada() {
+        return chaveCifrada;
+    }
+
+    public void setChaveCifrada(String chaveCifrada) {
+        this.chaveCifrada = chaveCifrada;
     }
 
     public boolean isAtiva() {

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>HookFishing</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23ff5a36'/%3E%3Cpath d='M7 16c3-4.5 7-6 11-4l5-3v14l-5-3c-4 2-8 .5-11-4z' fill='%23fff'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="css/app.css?v=20261117">
 </head>
 <body>
 
@@ -25,6 +25,20 @@
         <form id="form-login" class="formulario" novalidate>
             <h2>Entrar</h2>
             <p class="formulario__sub">Use o e-mail e a senha da sua conta.</p>
+
+            <fieldset id="servidor" class="servidor" hidden>
+                <legend>Servidor da API</legend>
+                <div class="servidor__opcoes">
+                    <label><input type="radio" name="servidor" value="local"> Local <small>localhost:8080</small></label>
+                    <label><input type="radio" name="servidor" value="render"> Render <small>hookfishing.onrender.com</small></label>
+                    <label><input type="radio" name="servidor" value="outro"> Outro</label>
+                </div>
+                <input id="servidor-url" type="url" placeholder="https://seu-servico.onrender.com" hidden>
+                <div class="servidor__rodape">
+                    <span id="servidor-status" class="servidor__status"></span>
+                    <button type="button" id="servidor-testar" class="link">Testar conexão</button>
+                </div>
+            </fieldset>
 
             <div class="campo">
                 <label for="login-email">E-mail</label>
@@ -98,7 +112,7 @@
                 <span id="limite-texto" class="limite__texto">–</span>
             </div>
             <div class="usuario">
-                <span id="usuario-nome" class="usuario__nome"></span>
+                <button type="button" id="usuario-nome" class="usuario__nome" title="Minha conta"></button>
                 <span id="usuario-papel" class="selo"></span>
                 <span id="usuario-plano" class="selo selo-plano"></span>
             </div>
@@ -166,6 +180,8 @@
 
         <section id="painel-planos" class="painel" hidden></section>
 
+        <section id="painel-conta" class="painel" hidden></section>
+
         <section id="painel-testes" class="painel" hidden></section>
     </main>
 
@@ -199,6 +215,6 @@
 
 <div id="toasts" class="toasts" aria-live="polite"></div>
 
-<script src="js/app.js"></script>
+<script src="js/app.js?v=20261117"></script>
 </body>
 </html>

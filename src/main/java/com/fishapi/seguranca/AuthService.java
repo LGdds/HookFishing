@@ -63,7 +63,7 @@ public class AuthService {
             throw new AcessoNegadoException("O acesso deste usuário foi desativado por um administrador.");
         }
 
-        String chave = apiKeyService.rotacionar(apiKey);
+        String chave = apiKeyService.chaveParaLogin(apiKey.getId());
         return new LoginResponse(chave, ApiKeyInterceptor.HEADER, UsuarioResponse.de(usuario),
                 Permissoes.mapaDe(apiKey.getPapel()));
     }

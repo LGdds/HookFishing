@@ -75,8 +75,9 @@ public class ApiKeyInterceptor implements HandlerInterceptor {
         String caminho = request.getRequestURI().substring(request.getContextPath().length());
         String metodo = request.getMethod();
 
-        // Qualquer papel pode consultar a própria chave
-        if (caminho.equals("/api-keys/me") && "GET".equals(metodo)) {
+        // Qualquer papel pode consultar a própria chave e gerar um novo valor para ela
+        if ((caminho.equals("/api-keys/me") && "GET".equals(metodo))
+                || (caminho.equals("/api-keys/me/regenerar") && "POST".equals(metodo))) {
             return;
         }
 

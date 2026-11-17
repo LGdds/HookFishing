@@ -12,12 +12,21 @@
  *   CORS               -> funciona também se o front-end for aberto em outra origem permitida
  * ===================================================================== */
 
-// Servido pela própria API (localhost:8080 ou Render, https sem porta): caminhos relativos.
-// Aberto como arquivo ou num servidor de desenvolvimento (Live Server, Vite...): chama a API em localhost:8080.
-// Para apontar para outra API, defina window.HOOKFISHING_API antes de carregar este script.
-const PORTAS_DESENVOLVIMENTO = ['3000', '5173', '5500', '63342', '8080'];
-const API = window.HOOKFISHING_API
-    ?? (location.protocol === 'file:' || PORTAS_DESENVOLVIMENTO.includes(location.port) ? 'http://localhost:8080' : '');
+// Endereço da API.
+// - Página servida pela própria API (localhost:8080 ou Render): mesmo endereço da página (caminhos relativos).
+// - index.html aberto direto no navegador (duplo clique), pelo IntelliJ ou pelo Live Server: o usuário escolhe
+//   o servidor na tela de login (local ou Render); a escolha fica salva neste navegador.
+// - window.HOOKFISHING_API, se definido antes deste script, tem prioridade.
+const PORTAS_DESENVOLVIMENTO = ['3000', '5173', '5500', '63342'];
+const BASE_STORAGE = 'hookfishing.servidor';
+const SERVIDORES = {
+    local: { nome: 'Local', url: 'http://localhost:8080' },
+    render: { nome: 'Render', url: 'https://hookfishing.onrender.com' }
+};
+const SERVIDO_PELA_API = !window.HOOKFISHING_API
+    && location.protocol !== 'file:' && !PORTAS_DESENVOLVIMENTO.includes(location.port);
+let API = window.HOOKFISHING_API
+    ?? (SERVIDO_PELA_API ? '' : (lerStorage(BASE_STORAGE) || SERVIDORES.local.url));
 
 const CHAVE_STORAGE = 'hookfishing.apiKey';
 
@@ -109,6 +118,7 @@ async function api(metodo, caminho, opcoes = {}) {
     }
 
     let resposta;
+    const inicio = performance.now();
     try {
         resposta = await fetch(API + caminho, { method: metodo, headers, body: corpo });
     } catch (e) {
@@ -118,6 +128,7 @@ async function api(metodo, caminho, opcoes = {}) {
                     + '. Verifique se a aplicação está rodando (e, se o front-end estiver em outra origem, se ela está liberada no CORS).' }
         };
         registrarLog(metodo, caminho, falha, headers);
+        capturar(metodo, caminho, headers, corpo, falha, performance.now() - inicio);
         return falha;
     }
 
@@ -134,11 +145,38 @@ async function api(metodo, caminho, opcoes = {}) {
         atualizarRateLimit(resposta.headers);
     }
     registrarLog(metodo, caminho, resultado, headers);
+    capturar(metodo, caminho, headers, corpo, resultado, performance.now() - inicio);
 
     if (resposta.status === 429 && daSessao) {
         mostrarAviso429(resposta);
     }
+    // A chave da sessão deixou de valer (trocada em outro lugar ou desativada): volta para o login com o motivo
+    if (resposta.status === 401 && estado.usuario && !opcoes.semChave && chave === estado.chave) {
+        sessaoEncerrada(dados?.mensagem);
+    }
     return resultado;
+}
+
+/* Durante a execução de um teste, guarda cada requisição feita para exibir no detalhe do cenário. */
+const HEADERS_CAPTURADOS = ['Content-Type', 'Location', 'Retry-After', 'X-API-Version', 'X-RateLimit-Limit',
+    'X-RateLimit-Remaining', 'X-RateLimit-Reset', 'X-RateLimit-Policy', 'X-RateLimit-Blocked-Until',
+    'X-Idempotency-Key', 'X-Idempotent-Replayed', 'Access-Control-Allow-Origin'];
+
+function capturar(metodo, caminho, headersEnviados, corpoEnviado, resultado, ms) {
+    if (!estado.captura) return;
+    const enviados = { ...headersEnviados };
+    if (enviados['X-API-Key']) {
+        enviados['X-API-Key'] = enviados['X-API-Key'].slice(0, 8) + '••••';
+    }
+    const recebidos = {};
+    HEADERS_CAPTURADOS.forEach(nome => {
+        const valor = resultado.headers?.get?.(nome);
+        if (valor) recebidos[nome] = valor;
+    });
+    estado.captura.push({
+        metodo, caminho, ms: Math.round(ms), status: resultado.status,
+        enviados, corpoEnviado: corpoEnviado ?? null, recebidos, dados: resultado.dados
+    });
 }
 
 function mensagemErro(resultado) {
@@ -497,6 +535,12 @@ async function cadastrar() {
     }
 }
 
+function sessaoEncerrada(motivo) {
+    sair();
+    mostrarErroAcesso('#login-erro', 'Sua sessão foi encerrada: a API Key usada por este navegador não é mais aceita '
+        + '(ela foi trocada ou desativada). Entre novamente.' + (motivo ? ` Detalhe: ${motivo}` : ''));
+}
+
 function sair() {
     estado.chave = null;
     estado.usuario = null;
@@ -527,7 +571,7 @@ function abrirApp() {
     selo.className = `selo selo--${estado.usuario.papel}`;
     atualizarSeloPlano();
     montarAbas();
-    const abaValida = (estado.aba in ENTIDADES && pode(estado.aba, 'CONSULTAR')) || ['planos', 'testes'].includes(estado.aba);
+    const abaValida = (estado.aba in ENTIDADES && pode(estado.aba, 'CONSULTAR')) || ['planos', 'conta', 'testes'].includes(estado.aba);
     selecionarAba(abaValida ? estado.aba : 'peixes');
 }
 
@@ -553,7 +597,8 @@ function montarAbas() {
     });
     abas.insertAdjacentHTML('beforeend',
         `<button type="button" class="aba" data-aba="planos">Planos</button>`
-        + `<button type="button" class="aba aba--destaque" data-aba="testes">Testes da Parte 2</button>`);
+        + `<button type="button" class="aba" data-aba="conta">Minha conta</button>`
+        + `<button type="button" class="aba aba--destaque" data-aba="testes">Testes</button>`);
 }
 
 function selecionarAba(id) {
@@ -561,6 +606,13 @@ function selecionarAba(id) {
     $$('.aba').forEach(b => b.classList.toggle('ativa', b.dataset.aba === id));
 
     $('#painel-planos').hidden = id !== 'planos';
+    $('#painel-conta').hidden = id !== 'conta';
+    if (id === 'conta') {
+        $('#painel-entidade').hidden = true;
+        $('#painel-testes').hidden = true;
+        montarConta();
+        return;
+    }
     if (id === 'testes') {
         $('#painel-entidade').hidden = true;
         $('#painel-testes').hidden = false;
@@ -913,7 +965,7 @@ async function excluir(item) {
 }
 
 /* ---------------------------------------------------------------------
- * Painel "Testes da Parte 2"
+ * Painel "Testes"
  *
  * Cada cenário faz requisições reais e compara o status obtido com o esperado.
  * ------------------------------------------------------------------- */
@@ -1011,6 +1063,137 @@ async function contratarPlano(plano) {
     montarPlanos();
 }
 
+/* ---------------------------------------------------------------------
+ * Minha conta: dados do usuário, API Key e permissões
+ * ------------------------------------------------------------------- */
+
+function dataHora(iso) {
+    if (!iso) return 'nunca';
+    return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function chaveMascarada(chave) {
+    return chave ? chave.slice(0, 11) + '•'.repeat(Math.max(8, chave.length - 11)) : '';
+}
+
+async function montarConta() {
+    const painel = $('#painel-conta');
+    const [me, limites] = await Promise.all([api('GET', '/api-keys/me'), api('GET', '/planos/limites')]);
+    if (!me.ok) {
+        painel.innerHTML = `<p class="erro">${esc(mensagemErro(me))}</p>`;
+        return;
+    }
+    estado.usuario = me.dados;
+    const u = me.dados;
+    const l = limites.ok ? limites.dados : null;
+    const base = API || location.origin;
+    const recursos = Object.keys(ROTULOS_RECURSOS);
+    const ops = Object.keys(OPERACOES);
+
+    painel.innerHTML = `
+        <div class="painel__cabecalho">
+            <div>
+                <h1>Minha conta</h1>
+                <p class="painel__descricao">Seus dados de acesso, a API Key usada pelas requisições e o que o seu papel permite.</p>
+            </div>
+        </div>
+
+        <div class="conta">
+            <section class="cartao conta__perfil">
+                <div class="conta__avatar" aria-hidden="true">${esc((u.nome || '?').trim().split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase())}</div>
+                <div>
+                    <h2>${esc(u.nome)}</h2>
+                    <p class="id">${esc(u.email)}</p>
+                    <div class="conta__selos">
+                        <span class="selo selo--${esc(u.papel)}">${esc(u.papel)}</span>
+                        <span class="selo selo-plano selo-plano--${esc(u.plano || 'GRATUITO')}">${esc(NOMES_PLANOS[u.plano] || 'Gratuito')}</span>
+                    </div>
+                </div>
+                <dl class="conta__dados">
+                    <div><dt>Conta criada em</dt><dd>${esc(dataHora(u.criadaEm))}</dd></div>
+                    <div><dt>Último uso da chave</dt><dd>${esc(dataHora(u.ultimoUsoEm))}</dd></div>
+                    <div><dt>Plano</dt><dd>${esc(NOMES_PLANOS[u.plano] || 'Gratuito')} · <button type="button" class="link" data-ir-aba="planos">ver planos</button></dd></div>
+                </dl>
+            </section>
+
+            <section class="cartao">
+                <header class="cartao__cabecalho">
+                    <div>
+                        <h2>API Key</h2>
+                        <p>Envie no header <code>X-API-Key</code> em todas as requisições.</p>
+                    </div>
+                    <span class="status-chave ${u.ativa ? 'status-chave--ativa' : ''}">${u.ativa ? 'Ativa' : 'Desativada'}</span>
+                </header>
+
+                <div class="chave-campo">
+                    <code id="conta-chave" data-visivel="false">${esc(chaveMascarada(estado.chave))}</code>
+                    <button type="button" class="btn btn--pequeno" id="btn-mostrar-chave">Mostrar</button>
+                    <button type="button" class="btn btn--pequeno" id="btn-copiar-minha-chave">Copiar</button>
+                </div>
+                <p class="conta__nota">Prefixo <code>${esc(u.prefixo || '')}</code>. A API guarda apenas o hash da chave: o valor
+                    completo só aparece aqui porque está salvo neste navegador. Entrar de novo devolve a mesma chave; para trocá-la, use o botão abaixo.</p>
+
+                <h3>Exemplo de uso</h3>
+                <pre class="codigo">curl ${esc(base)}/peixes \\
+  -H "X-API-Key: ${esc(chaveMascarada(estado.chave))}" \\
+  -H "X-API-Version: 1"</pre>
+
+                <div class="conta__perigo">
+                    <div>
+                        <b>Gerar nova chave</b>
+                        <p>Use se a chave vazou. O valor atual deixa de funcionar na hora, em qualquer lugar onde estiver configurado.</p>
+                    </div>
+                    <button type="button" class="btn btn--perigo" id="btn-regenerar-minha-chave">Gerar nova chave</button>
+                </div>
+            </section>
+
+            ${l ? `
+            <section class="cartao">
+                <header class="cartao__cabecalho">
+                    <div><h2>Consumo</h2><p>Limite de requisições do plano ${esc(NOMES_PLANOS[u.plano] || 'Gratuito')}.</p></div>
+                </header>
+                <div class="consumo__barra"><div style="width:${Math.max(0, Math.min(100, l.fichasRestantes / l.capacidade * 100))}%"></div></div>
+                <p><b>${l.fichasRestantes} de ${l.capacidade}</b> requisições disponíveis agora · recarga de ${l.recargaPorMinuto} por minuto (${esc(l.ritmo)}).</p>
+            </section>` : ''}
+
+            <section class="cartao conta__permissoes">
+                <header class="cartao__cabecalho">
+                    <div><h2>Permissões</h2><p>O que o papel ${esc(u.papel)} pode fazer em cada recurso.</p></div>
+                </header>
+                <div class="tabela-wrap">
+                    <table class="tabela matriz">
+                        <thead><tr><th>Recurso</th>${ops.map(o => `<th>${esc(OPERACOES[o])}</th>`).join('')}</tr></thead>
+                        <tbody>
+                        ${recursos.map(r => `<tr><th scope="row">${esc(ROTULOS_RECURSOS[r])}</th>${ops.map(o => {
+                            const ok = (u.permissoes?.[r] || []).includes(o);
+                            return `<td><span class="matriz__marca matriz__marca--${ok ? 'sim' : 'nao'}">${ok ? 'Sim' : 'Não'}</span></td>`;
+                        }).join('')}</tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>`;
+}
+
+async function regenerarMinhaChave() {
+    const botao = $('#btn-regenerar-minha-chave');
+    botao.disabled = true;
+    const r = await api('POST', '/api-keys/me/regenerar');
+    botao.disabled = false;
+    if (!r.ok || !r.dados?.chave) {
+        toast('Não foi possível gerar uma nova chave.', 'erro', mensagemErro(r));
+        return;
+    }
+    estado.chave = r.dados.chave;
+    gravarStorage(CHAVE_STORAGE, r.dados.chave);
+    toast('Nova chave gerada. A anterior deixou de funcionar.', 'ok');
+    await montarConta();
+    const campo = $('#conta-chave');
+    campo.textContent = estado.chave;
+    campo.dataset.visivel = 'true';
+    $('#btn-mostrar-chave').textContent = 'Ocultar';
+}
+
 const ROTULOS_RECURSOS = {
     peixes: 'Peixes', alimentacoes: 'Alimentações', especies: 'Espécies', aquarios: 'Aquários',
     cuidadores: 'Cuidadores', 'api-keys': 'API Keys'
@@ -1023,10 +1206,9 @@ const CHAVES_DEMO = {
     VISITANTE: 'hf_visitante_demo_2025'
 };
 
-function corpo(r) {
-    if (!r?.dados) return '(sem corpo)';
-    const { _links, ...resto } = r.dados;
-    return json(resto);
+// O corpo das respostas aparece no painel de requisições do cenário; o texto de resultado traz só a análise
+function corpo() {
+    return '';
 }
 
 async function primeiroItem(rota, rel) {
@@ -1049,50 +1231,44 @@ function resultadoSimples(r, esperado, extra = '') {
 
 const GRUPOS_TESTE = [
     {
-        id: 'idempotencia', titulo: 'Idempotência', requisito: '4.1',
-        descricao: 'Requisições POST com a mesma X-Idempotency-Key não criam registros duplicados.',
+        id: 'idempotencia', titulo: 'Idempotência',
+        descricao: 'POST com X-Idempotency-Key não duplica registros.',
         casos: ['idem-repetir', 'idem-outro-corpo', 'idem-sem-chave']
     },
     {
-        id: 'autenticacao', titulo: 'Autenticação e papéis', requisito: '4.2',
-        descricao: 'A API exige X-API-Key e libera cada operação conforme o papel da chave.',
+        id: 'autenticacao', titulo: 'Autenticação e autorização',
+        descricao: 'API Key obrigatória e permissões por papel.',
         casos: ['auth-sem', 'auth-invalida', 'auth-login', 'auth-cuidador', 'auth-visitante', 'auth-biologo', 'auth-me']
     },
     {
-        id: 'planos', titulo: 'Planos e consumo', requisito: '4.3',
-        descricao: 'Cada plano define o tamanho do balde (token bucket) da API Key. A tabela de planos é pública.',
-        casos: ['planos-listar', 'planos-limites']
+        id: 'limites', titulo: 'Planos e limite de requisições',
+        descricao: 'Token bucket por plano, Retry-After e bloqueio progressivo.',
+        casos: ['planos-listar', 'planos-limites', 'rate', 'rate-bloqueio'],
+        // Esvaziam o balde da chave de demonstração do visitante: só rodam sob demanda
+        manuais: ['rate', 'rate-bloqueio']
     },
     {
-        id: 'rate', titulo: 'Limite de requisições e bloqueio', requisito: '4.3',
-        descricao: 'Usam a chave de demonstração do visitante (plano Gratuito: 20 requisições de uma vez, recarga de 30 '
-            + 'por minuto). Ao esvaziar o balde, a API responde 429 com Retry-After. Quem insiste 5 vezes seguidas é '
-            + 'bloqueado por 60 s (o tempo dobra a cada reincidência em 10 min, até 15 min). Estes cenários não entram '
-            + 'em "Executar todos" e não afetam o limite da sua conta.',
-        casos: ['rate', 'rate-bloqueio']
+        id: 'cors', titulo: 'CORS',
+        descricao: 'Origens autorizadas a chamar a API pelo navegador.',
+        casos: ['cors-permitida', 'cors-negada', 'cors-front']
     },
     {
-        id: 'cors', titulo: 'CORS', requisito: '4.4',
-        descricao: 'Apenas as origens configuradas podem chamar a API pelo navegador.',
-        casos: ['cors']
-    },
-    {
-        id: 'versionamento', titulo: 'Versionamento', requisito: '4.5',
-        descricao: 'O header X-API-Version escolhe a versão da resposta de GET /peixes e GET /peixes/{id}.',
+        id: 'versionamento', titulo: 'Versionamento',
+        descricao: 'Formato da resposta escolhido pelo header X-API-Version.',
         casos: ['versao-comparar', 'versao-invalida']
     },
     {
-        id: 'erros', titulo: 'Validações e tratamento de erros', requisito: '5',
-        descricao: 'Erros são tratados pelo @ControllerAdvice e seguem sempre o mesmo formato.',
+        id: 'erros', titulo: 'Validação e tratamento de erros',
+        descricao: 'Respostas de erro padronizadas pelo @ControllerAdvice.',
         casos: ['erro-validacao', 'erro-enum', 'erro-404', 'erro-405', 'erro-409']
     }
 ];
 
 const CASOS = {
     'idem-repetir': {
-        nome: 'Mesmo POST enviado duas vezes',
-        requisicao: 'POST /alimentacoes (2x, mesma chave)',
-        esperado: '201 nas duas, mesmo id',
+        nome: 'Reenvio com a mesma chave devolve o registro original',
+        requisicao: 'POST /alimentacoes',
+        esperado: '201 · mesmo id',
         async executar() {
             const chave = uuid();
             const corpoReq = { nome: `Ração Teste ${Math.floor(Math.random() * 9000 + 1000)}`, tipo: 'RACAO' };
@@ -1112,7 +1288,7 @@ const CASOS = {
         }
     },
     'idem-outro-corpo': {
-        nome: 'Mesma chave com outro corpo',
+        nome: 'Mesma chave com corpo diferente é rejeitada',
         requisicao: 'POST /alimentacoes',
         esperado: '422',
         async executar() {
@@ -1129,7 +1305,7 @@ const CASOS = {
         }
     },
     'idem-sem-chave': {
-        nome: 'POST sem X-Idempotency-Key',
+        nome: 'POST sem X-Idempotency-Key é rejeitado',
         requisicao: 'POST /alimentacoes',
         esperado: '400',
         async executar() {
@@ -1138,7 +1314,7 @@ const CASOS = {
         }
     },
     'auth-sem': {
-        nome: 'Requisição sem X-API-Key',
+        nome: 'Requisição sem credencial',
         requisicao: 'GET /peixes',
         esperado: '401',
         async executar() {
@@ -1147,7 +1323,7 @@ const CASOS = {
         }
     },
     'auth-invalida': {
-        nome: 'Chave inexistente',
+        nome: 'API Key inexistente',
         requisicao: 'GET /peixes',
         esperado: '401',
         async executar() {
@@ -1166,7 +1342,7 @@ const CASOS = {
         }
     },
     'auth-cuidador': {
-        nome: 'CUIDADOR excluindo um peixe',
+        nome: 'Cuidador não pode excluir peixe',
         requisicao: 'DELETE /peixes/{id}',
         esperado: '403',
         async executar() {
@@ -1176,7 +1352,7 @@ const CASOS = {
         }
     },
     'auth-visitante': {
-        nome: 'VISITANTE cadastrando alimentação',
+        nome: 'Visitante não pode cadastrar alimentação',
         requisicao: 'POST /alimentacoes',
         esperado: '403',
         async executar() {
@@ -1189,7 +1365,7 @@ const CASOS = {
         }
     },
     'auth-biologo': {
-        nome: 'BIOLOGO alterando um aquário',
+        nome: 'Biólogo não pode alterar aquário',
         requisicao: 'PUT /aquarios/1',
         esperado: '403',
         async executar() {
@@ -1201,7 +1377,7 @@ const CASOS = {
         }
     },
     'auth-me': {
-        nome: 'Consulta da própria chave',
+        nome: 'Consulta da própria API Key',
         requisicao: 'GET /api-keys/me',
         esperado: '200',
         async executar() {
@@ -1209,9 +1385,9 @@ const CASOS = {
         }
     },
     'planos-listar': {
-        nome: 'Tabela de planos sem chave',
-        requisicao: 'GET /planos (sem X-API-Key)',
-        esperado: '200 com 3 planos',
+        nome: 'Catálogo de planos é público',
+        requisicao: 'GET /planos',
+        esperado: '200 · 3 planos',
         async executar() {
             const r = await api('GET', '/planos', { semChave: true });
             const planos = r.dados?._embedded?.planos || [];
@@ -1224,9 +1400,9 @@ const CASOS = {
         }
     },
     'planos-limites': {
-        nome: 'Consumo da chave atual',
+        nome: 'Consumo da chave segue o plano',
         requisicao: 'GET /planos/limites',
-        esperado: '200 com o plano da chave',
+        esperado: '200',
         async executar() {
             const r = await api('GET', '/planos/limites');
             return {
@@ -1237,9 +1413,9 @@ const CASOS = {
         }
     },
     rate: {
-        nome: 'Requisições seguidas até o limite',
-        requisicao: 'GET /especies (repetido)',
-        esperado: '429 + Retry-After',
+        nome: 'Rajada acima da capacidade do plano',
+        requisicao: 'GET /especies',
+        esperado: '429 · Retry-After',
         async executar() {
             const contagem = {};
             let bloqueio = null;
@@ -1273,9 +1449,9 @@ const CASOS = {
         }
     },
     'rate-bloqueio': {
-        nome: 'Insistir depois do 429',
-        requisicao: 'GET /especies (até ser bloqueado)',
-        esperado: '429 + X-RateLimit-Blocked-Until',
+        nome: 'Insistência após o 429 bloqueia a chave',
+        requisicao: 'GET /especies',
+        esperado: '429 · Blocked-Until',
         async executar() {
             const linhas = [];
             let bloqueio = null;
@@ -1306,41 +1482,53 @@ const CASOS = {
             };
         }
     },
-    cors: {
-        nome: 'Origem do front-end',
+    'cors-permitida': {
+        nome: 'Origem configurada é aceita',
+        requisicao: 'GET /cors?origem=http://localhost:5500',
+        esperado: '200 · permitida',
+        async executar() {
+            const r = await api('GET', '/cors?origem=' + encodeURIComponent('http://localhost:5500'), { semChave: true });
+            return {
+                passou: r.status === 200 && r.dados?.permitida === true,
+                obtido: `HTTP ${r.status || 'sem resposta'}` + (r.dados ? ` · ${r.dados.permitida ? 'permitida' : 'recusada'}` : ''),
+                detalhe: r.dados?.motivo || ''
+            };
+        }
+    },
+    'cors-negada': {
+        nome: 'Origem desconhecida é recusada',
+        requisicao: 'GET /cors?origem=https://site-externo.example',
+        esperado: '200 · recusada',
+        async executar() {
+            const r = await api('GET', '/cors?origem=' + encodeURIComponent('https://site-externo.example'), { semChave: true });
+            return {
+                passou: r.status === 200 && r.dados?.permitida === false,
+                obtido: `HTTP ${r.status || 'sem resposta'}` + (r.dados ? ` · ${r.dados.permitida ? 'permitida' : 'recusada'}` : ''),
+                detalhe: r.dados?.motivo || ''
+            };
+        }
+    },
+    'cors-front': {
+        nome: 'Front-end atual consegue chamar a API',
         requisicao: 'GET /peixes',
-        esperado: 'origem permitida',
+        esperado: '200',
         async executar() {
             const r = await api('GET', '/peixes?size=1');
             const outraOrigem = API !== '' && !API.startsWith(location.origin);
             const permitido = r.headers.get('Access-Control-Allow-Origin');
-            const detalhe = [
-                `Origem do front-end: ${location.origin}`,
-                `Endereço da API: ${API || location.origin}`,
-                `Access-Control-Allow-Origin: ${permitido ?? '(não enviado: mesma origem)'}`,
-                '',
-                outraOrigem
-                    ? 'O front-end está em outra origem e a chamada funcionou: a API liberou esta origem.'
-                    : 'O front-end está na mesma origem da API, então o navegador não aplica CORS. '
-                        + 'Para ver o CORS em ação, abra o index.html pelo Live Server (porta 5500).',
-                '',
-                'Preflight pelo terminal:',
-                `curl -i -X OPTIONS ${API || location.origin}/peixes \\`,
-                '  -H "Origin: http://localhost:5500" \\',
-                '  -H "Access-Control-Request-Method: POST" \\',
-                '  -H "Access-Control-Request-Headers: X-API-Key, X-Idempotency-Key, Content-Type"'
-            ].join('\n');
             return {
                 passou: r.ok,
-                obtido: outraOrigem ? `HTTP ${r.status}, ${permitido ?? 'sem header'}` : `HTTP ${r.status}, mesma origem`,
-                detalhe
+                obtido: `HTTP ${r.status || 'sem resposta'}` + (outraOrigem ? ` · ${permitido ?? 'sem Allow-Origin'}` : ' · mesma origem'),
+                detalhe: outraOrigem
+                    ? `Front-end em ${location.origin}, API em ${API}. A resposta trouxe Access-Control-Allow-Origin: ${permitido}.`
+                    : `Front-end e API em ${location.origin} (mesma origem): o navegador não aplica CORS a esta chamada.`
             };
         }
     },
     'versao-comparar': {
-        nome: 'Mesmo peixe em v1 e v2',
+        nome: 'Mesmo recurso em v1 e v2',
         requisicao: 'GET /peixes/{id}',
-        esperado: '200 e 200, formatos diferentes',
+        esperado: '200 · formatos distintos',
         async executar() {
             const peixe = await primeiroItem('/peixes', 'peixes');
             if (!peixe) {
@@ -1357,17 +1545,17 @@ const CASOS = {
         }
     },
     'versao-invalida': {
-        nome: 'Versão inexistente',
-        requisicao: 'GET /peixes com X-API-Version: 3',
+        nome: 'Versão não suportada',
+        requisicao: 'GET /peixes',
         esperado: '400',
         async executar() {
             return resultadoSimples(await api('GET', '/peixes?size=1', { headers: { 'X-API-Version': '3' } }), 400);
         }
     },
     'erro-validacao': {
-        nome: 'Campos inválidos',
+        nome: 'Campos inválidos retornam a lista de erros',
         requisicao: 'POST /peixes',
-        esperado: '400 com lista de campos',
+        esperado: '400 · campos',
         async executar() {
             const r = await api('POST', '/peixes', {
                 chave: chaveParaCadastro(),
@@ -1403,7 +1591,7 @@ const CASOS = {
         }
     },
     'erro-405': {
-        nome: 'Método não suportado',
+        nome: 'Método HTTP não suportado',
         requisicao: 'PATCH /peixes/1',
         esperado: '405',
         async executar() {
@@ -1411,7 +1599,7 @@ const CASOS = {
         }
     },
     'erro-409': {
-        nome: 'Nome duplicado',
+        nome: 'Cadastro duplicado',
         requisicao: 'POST /alimentacoes',
         esperado: '409',
         async executar() {
@@ -1429,113 +1617,251 @@ const CASOS = {
     }
 };
 
+const ICONES = {
+    executar: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 3.2v9.6L12.5 8z" fill="currentColor"/></svg>',
+    seta: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+};
+
+const resultadosTestes = {};
+
+function grupoDoCaso(id) {
+    return GRUPOS_TESTE.find(g => g.casos.includes(id));
+}
+
+function ehManual(id) {
+    return (grupoDoCaso(id)?.manuais || []).includes(id);
+}
+
+function rotaDoCaso(caso) {
+    const [metodo, ...resto] = caso.requisicao.split(' ');
+    return `<span class="metodo metodo--${esc(metodo)}">${esc(metodo)}</span><span class="rota">${esc(resto.join(' '))}</span>`;
+}
+
 function montarTestes() {
-    const permissoes = Object.entries(estado.usuario?.permissoes || {})
-        .map(([recurso, ops]) => `<tr><td>${esc(ROTULOS_RECURSOS[recurso] || recurso)}</td>`
+    const u = estado.usuario || {};
+    const permissoes = Object.entries(u.permissoes || {})
+        .map(([recurso, ops]) => `<tr><th>${esc(ROTULOS_RECURSOS[recurso] || recurso)}</th>`
             + `<td>${ops.length ? esc(ops.map(o => OPERACOES[o] || o).join(', ')) : '<span class="id">sem acesso</span>'}</td></tr>`)
         .join('');
 
     $('#painel-testes').innerHTML = `
-        <div class="painel__cabecalho">
+        <div class="suite__topo">
             <div>
-                <h1>Testes da Parte 2</h1>
-                <p class="painel__descricao">Cenários que verificam os requisitos da Parte 2 com requisições reais à API.
-                    O resultado compara o status HTTP obtido com o esperado.</p>
+                <h1>Testes da API</h1>
+                <p class="painel__descricao">Cenários executados contra <code>${esc(API || location.origin)}</code>.
+                    Cada resultado mostra a requisição enviada e a resposta recebida.</p>
             </div>
-            <div class="testes__acoes">
-                <span id="testes-resumo" class="testes__resumo"></span>
+            <div class="suite__acoes">
+                <div class="segmentado" role="group" aria-label="Filtrar cenários">
+                    <button type="button" data-filtro="todos" aria-pressed="true">Todos</button>
+                    <button type="button" data-filtro="falhou" aria-pressed="false">Falhas</button>
+                    <button type="button" data-filtro="pendente" aria-pressed="false">Pendentes</button>
+                </div>
                 <button id="btn-executar-todos" class="btn btn--primario" type="button">Executar todos</button>
             </div>
         </div>
 
-        <div class="testes__conta">
-            <div>
-                <span class="testes__rotulo">Conta atual</span>
-                <b>${esc(estado.usuario?.nome)}</b>
-                <span class="selo selo--${esc(estado.usuario?.papel)}">${esc(estado.usuario?.papel)}</span>
-            </div>
-            <table class="permissoes-tabela"><tbody>${permissoes}</tbody></table>
+        <div class="metricas" id="testes-metricas"></div>
+
+        <div class="suite__contexto">
+            <span>Executando como <b>${esc(u.nome)}</b></span>
+            <span class="selo selo--${esc(u.papel)}">${esc(u.papel)}</span>
+            <span class="selo selo-plano selo-plano--${esc(u.plano || 'GRATUITO')}">${esc(NOMES_PLANOS[u.plano] || 'Gratuito')}</span>
+            <details class="suite__permissoes">
+                <summary>Permissões desta conta</summary>
+                <table class="permissoes-tabela"><tbody>${permissoes}</tbody></table>
+            </details>
         </div>
 
         ${GRUPOS_TESTE.map(grupo => `
-            <section class="grupo-teste">
-                <header class="grupo-teste__cabecalho">
-                    <h2>${esc(grupo.titulo)}</h2>
+            <section class="suite" data-suite="${grupo.id}">
+                <header class="suite__cabecalho">
+                    <div>
+                        <h2>${esc(grupo.titulo)}</h2>
+                        <p>${esc(grupo.descricao)}</p>
+                    </div>
+                    <span class="suite__contagem" data-contagem="${grupo.id}"></span>
+                    <button class="btn btn--pequeno" type="button" data-executar-suite="${grupo.id}">Executar suíte</button>
                 </header>
-                <p class="grupo-teste__descricao">${esc(grupo.descricao)}</p>
-                <div class="tabela-wrap">
-                    <table class="tabela tabela--testes">
-                        <thead><tr><th>Cenário</th><th>Requisição</th><th>Esperado</th><th>Resultado</th><th></th></tr></thead>
-                        <tbody>
-                        ${grupo.casos.map(id => `
-                            <tr data-caso="${id}">
-                                <td>${esc(CASOS[id].nome)}</td>
-                                <td><code>${esc(CASOS[id].requisicao)}</code></td>
-                                <td>${esc(CASOS[id].esperado)}</td>
-                                <td class="caso__resultado"><span class="status status--pendente">Não executado</span></td>
-                                <td class="acoes">
-                                    <button class="btn btn--pequeno" type="button" data-executar="${id}">Executar</button>
-                                    <button class="btn btn--pequeno btn--fantasma-escuro" type="button" data-detalhe="${id}" hidden>Detalhes</button>
-                                </td>
-                            </tr>
-                            <tr class="caso__detalhe" data-detalhe-de="${id}" hidden>
-                                <td colspan="5"><pre></pre></td>
-                            </tr>`).join('')}
-                        </tbody>
-                    </table>
+                <div class="casos__cabecalho" aria-hidden="true">
+                    <span></span><span>Cenário</span><span>Esperado</span><span>Obtido</span><span>Tempo</span><span></span>
                 </div>
+                <ol class="casos">
+                ${grupo.casos.map(id => `
+                    <li class="caso" data-caso="${id}">
+                        <div class="caso__linha">
+                            <span class="caso__icone" aria-hidden="true"></span>
+                            <div class="caso__titulo">
+                                <b>${esc(CASOS[id].nome)}</b>
+                                <span class="caso__rota">${rotaDoCaso(CASOS[id])}</span>
+                                ${ehManual(id) ? '<span class="caso__manual" title="Usa a chave de demonstração do visitante e esvazia o limite dela. Não roda em Executar todos.">Manual</span>' : ''}
+                            </div>
+                            <span class="caso__esperado">${esc(CASOS[id].esperado)}</span>
+                            <span class="caso__obtido">-</span>
+                            <span class="caso__tempo">-</span>
+                            <span class="caso__botoes">
+                                <button class="icone-btn" type="button" data-executar="${id}" title="Executar" aria-label="Executar ${esc(CASOS[id].nome)}">${ICONES.executar}</button>
+                                <button class="icone-btn caso__expandir" type="button" data-detalhe="${id}" title="Ver requisições" aria-label="Ver requisições" aria-expanded="false" disabled>${ICONES.seta}</button>
+                            </span>
+                        </div>
+                        <div class="caso__painel" hidden></div>
+                    </li>`).join('')}
+                </ol>
             </section>`).join('')}`;
+
+    Object.entries(resultadosTestes).forEach(([id, r]) => mostrarResultado(id, r));
     atualizarResumoTestes();
 }
 
-async function executarCaso(id) {
-    const linha = $(`tr[data-caso="${id}"]`);
-    const celula = $('.caso__resultado', linha);
-    const botao = $(`[data-executar="${id}"]`, linha);
-    botao.disabled = true;
-    celula.innerHTML = '<span class="status status--rodando">Executando</span>';
+function blocoCodigo(valor) {
+    if (valor === null || valor === undefined || valor === '') return '<pre class="codigo codigo--vazio">sem corpo</pre>';
+    let texto = valor;
+    if (typeof valor === 'string') {
+        try { texto = json(JSON.parse(valor)); } catch { /* texto puro */ }
+    } else {
+        const { _links, ...resto } = valor;
+        texto = json(resto);
+    }
+    return `<pre class="codigo">${esc(texto)}</pre>`;
+}
 
+function listaHeaders(headers) {
+    const linhas = Object.entries(headers || {});
+    if (!linhas.length) return '<p class="id">nenhum header relevante</p>';
+    return `<dl class="headers">${linhas.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
+}
+
+function classeStatus(status) {
+    if (!status) return 'erro';
+    if (status < 300) return 'ok';
+    if (status < 500) return 'aviso';
+    return 'erro';
+}
+
+function renderizarPainel(id, r) {
+    const capturas = r.capturas || [];
+    const LIMITE = 4;
+    const exibidas = capturas.length > LIMITE ? capturas.slice(-LIMITE) : capturas;
+    return `
+        ${r.detalhe?.trim() ? `<div class="caso__analise"><span>Análise</span><pre>${esc(r.detalhe.trim())}</pre></div>` : ''}
+        ${capturas.length > LIMITE ? `<p class="caso__nota">${capturas.length} requisições feitas; exibindo as ${LIMITE} últimas.</p>` : ''}
+        ${exibidas.map((c, i) => `
+            <details class="troca" ${i === exibidas.length - 1 ? 'open' : ''}>
+                <summary>
+                    <span class="metodo metodo--${esc(c.metodo)}">${esc(c.metodo)}</span>
+                    <span class="rota">${esc(c.caminho)}</span>
+                    <span class="codigo-http codigo-http--${classeStatus(c.status)}">${c.status || 'sem resposta'}</span>
+                    <span class="troca__tempo">${c.ms} ms</span>
+                </summary>
+                <div class="troca__corpo">
+                    <div>
+                        <h4>Requisição</h4>
+                        ${listaHeaders(c.enviados)}
+                        ${c.corpoEnviado ? blocoCodigo(c.corpoEnviado) : ''}
+                    </div>
+                    <div>
+                        <h4>Resposta</h4>
+                        ${listaHeaders(c.recebidos)}
+                        ${blocoCodigo(c.dados)}
+                    </div>
+                </div>
+            </details>`).join('')}`;
+}
+
+function mostrarResultado(id, r) {
+    const item = $(`.caso[data-caso="${id}"]`);
+    if (!item) return;
+    item.dataset.situacao = r.passou ? 'passou' : 'falhou';
+    $('.caso__obtido', item).textContent = r.obtido || '-';
+    $('.caso__tempo', item).textContent = `${r.ms} ms`;
+    $('.caso__painel', item).innerHTML = renderizarPainel(id, r);
+    $('[data-detalhe]', item).disabled = false;
+}
+
+async function executarCaso(id) {
+    const item = $(`.caso[data-caso="${id}"]`);
+    item.dataset.situacao = 'rodando';
+    $('.caso__obtido', item).textContent = 'Executando...';
+    $(`[data-executar="${id}"]`, item).disabled = true;
+
+    estado.captura = [];
+    const inicio = performance.now();
     let resultado;
     try {
         resultado = await CASOS[id].executar();
     } catch (e) {
-        resultado = { passou: false, obtido: 'erro no teste', detalhe: String(e) };
+        resultado = { passou: false, obtido: 'erro no cenário', detalhe: String(e) };
     }
+    resultado.ms = Math.round(performance.now() - inicio);
+    resultado.capturas = estado.captura;
+    estado.captura = null;
 
-    linha.dataset.situacao = resultado.passou ? 'passou' : 'falhou';
-    celula.innerHTML = `<span class="status status--${resultado.passou ? 'ok' : 'falha'}">${resultado.passou ? 'Passou' : 'Falhou'}</span>`
-        + `<span class="caso__obtido">${esc(resultado.obtido)}</span>`;
-    $(`tr[data-detalhe-de="${id}"] pre`).textContent = resultado.detalhe || '';
-    $(`[data-detalhe="${id}"]`, linha).hidden = !resultado.detalhe;
-    botao.disabled = false;
+    resultadosTestes[id] = resultado;
+    mostrarResultado(id, resultado);
+    $(`[data-executar="${id}"]`, item).disabled = false;
     atualizarResumoTestes();
 }
 
 function atualizarResumoTestes() {
-    const linhas = $$('tr[data-caso]');
-    const executados = linhas.filter(l => l.dataset.situacao);
-    const passaram = executados.filter(l => l.dataset.situacao === 'passou').length;
-    const resumo = $('#testes-resumo');
-    if (resumo) {
-        resumo.textContent = executados.length
-            ? `${passaram} de ${executados.length} cenário(s) executado(s) passaram`
-            : `${linhas.length} cenários`;
+    const itens = $$('.caso[data-caso]');
+    if (!itens.length) return;
+    const passaram = itens.filter(i => i.dataset.situacao === 'passou').length;
+    const falharam = itens.filter(i => i.dataset.situacao === 'falhou').length;
+    const executados = passaram + falharam;
+    const tempo = Object.values(resultadosTestes).reduce((t, r) => t + (r.ms || 0), 0);
+    const pct = Math.round(executados / itens.length * 100);
+
+    $('#testes-metricas').innerHTML = `
+        <div class="metrica"><span>Cenários</span><b>${itens.length}</b></div>
+        <div class="metrica metrica--ok"><span>Aprovados</span><b>${passaram}</b></div>
+        <div class="metrica metrica--erro"><span>Falhas</span><b>${falharam}</b></div>
+        <div class="metrica"><span>Tempo total</span><b>${tempo ? (tempo / 1000).toFixed(1) + ' s' : '-'}</b></div>
+        <div class="metrica metrica--progresso">
+            <span>Execução</span>
+            <div class="progresso" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">
+                <div class="progresso__ok" style="width:${passaram / itens.length * 100}%"></div>
+                <div class="progresso__erro" style="width:${falharam / itens.length * 100}%"></div>
+            </div>
+            <small>${executados} de ${itens.length} executados</small>
+        </div>`;
+
+    GRUPOS_TESTE.forEach(g => {
+        const alvo = $(`[data-contagem="${g.id}"]`);
+        if (!alvo) return;
+        const doGrupo = g.casos.map(id => $(`.caso[data-caso="${id}"]`));
+        const ok = doGrupo.filter(i => i.dataset.situacao === 'passou').length;
+        const falha = doGrupo.filter(i => i.dataset.situacao === 'falhou').length;
+        alvo.textContent = ok + falha ? `${ok}/${g.casos.length} aprovados` : `${g.casos.length} cenários`;
+        alvo.className = 'suite__contagem' + (falha ? ' suite__contagem--erro' : ok === g.casos.length ? ' suite__contagem--ok' : '');
+    });
+    aplicarFiltroTestes();
+}
+
+function aplicarFiltroTestes() {
+    const filtro = estado.filtroTestes || 'todos';
+    $$('.caso[data-caso]').forEach(item => {
+        const situacao = item.dataset.situacao || 'pendente';
+        item.hidden = filtro !== 'todos' && !(filtro === situacao || (filtro === 'pendente' && situacao === 'rodando'));
+    });
+    $$('.suite').forEach(suite => {
+        suite.hidden = !$$('.caso', suite).some(i => !i.hidden);
+    });
+}
+
+async function executarLista(ids, botao) {
+    if (botao) botao.disabled = true;
+    try {
+        for (const id of ids) {
+            await executarCaso(id);
+        }
+    } finally {
+        if (botao) botao.disabled = false;
     }
 }
 
-async function executarTodos() {
-    const botao = $('#btn-executar-todos');
-    botao.disabled = true;
-    try {
-        for (const grupo of GRUPOS_TESTE) {
-            if (grupo.id === 'rate') continue;  // esvazia o balde e bloqueia a chave de demonstração
-            for (const id of grupo.casos) {
-                await executarCaso(id);
-            }
-        }
-    } finally {
-        botao.disabled = false;
-    }
+function executarTodos() {
+    const ids = GRUPOS_TESTE.flatMap(g => g.casos.filter(id => !(g.manuais || []).includes(id)));
+    return executarLista(ids, $('#btn-executar-todos'));
 }
 
 /* ---------------------------------------------------------------------
@@ -1543,6 +1869,21 @@ async function executarTodos() {
  * ------------------------------------------------------------------- */
 
 function registrarEventos() {
+    $('#servidor').addEventListener('change', e => {
+        if (e.target.name === 'servidor') {
+            const outro = e.target.value === 'outro';
+            $('#servidor-url').hidden = !outro;
+            if (outro) {
+                $('#servidor-url').focus();
+            } else {
+                trocarServidor(SERVIDORES[e.target.value].url);
+            }
+        } else if (e.target.id === 'servidor-url') {
+            trocarServidor(e.target.value);
+        }
+    });
+    $('#servidor-testar').addEventListener('click', verificarServidor);
+
     $('#form-login').addEventListener('submit', e => {
         e.preventDefault();
         entrar($('#login-email').value.trim(), $('#login-senha').value);
@@ -1612,6 +1953,28 @@ function registrarEventos() {
         if (botao.dataset.extra != null) def.acaoExtra.executar(estado.itens[botao.dataset.extra]);
     });
 
+    $('#painel-conta').addEventListener('click', async e => {
+        if (e.target.closest('#btn-mostrar-chave')) {
+            const campo = $('#conta-chave');
+            const visivel = campo.dataset.visivel === 'true';
+            campo.textContent = visivel ? chaveMascarada(estado.chave) : estado.chave;
+            campo.dataset.visivel = String(!visivel);
+            e.target.textContent = visivel ? 'Mostrar' : 'Ocultar';
+        } else if (e.target.closest('#btn-copiar-minha-chave')) {
+            try {
+                await navigator.clipboard.writeText(estado.chave);
+                toast('Chave copiada.', 'ok');
+            } catch {
+                toast('Não foi possível copiar automaticamente. Clique em Mostrar e copie o texto.', 'alerta');
+            }
+        } else if (e.target.closest('#btn-regenerar-minha-chave')) {
+            regenerarMinhaChave();
+        } else if (e.target.closest('[data-ir-aba]')) {
+            selecionarAba(e.target.closest('[data-ir-aba]').dataset.irAba);
+        }
+    });
+    $('#usuario-nome').addEventListener('click', () => selecionarAba('conta'));
+
     $('#painel-planos').addEventListener('click', e => {
         const botao = e.target.closest('[data-plano]');
         if (botao && !botao.disabled) {
@@ -1629,11 +1992,24 @@ function registrarEventos() {
             executarCaso(executar.dataset.executar);
             return;
         }
+        const suite = e.target.closest('[data-executar-suite]');
+        if (suite) {
+            const grupo = GRUPOS_TESTE.find(g => g.id === suite.dataset.executarSuite);
+            executarLista(grupo.casos.filter(id => !(grupo.manuais || []).includes(id)), suite);
+            return;
+        }
         const detalhe = e.target.closest('[data-detalhe]');
         if (detalhe) {
-            const linha = $(`tr[data-detalhe-de="${detalhe.dataset.detalhe}"]`);
-            linha.hidden = !linha.hidden;
-            detalhe.textContent = linha.hidden ? 'Detalhes' : 'Ocultar';
+            const painel = $('.caso__painel', detalhe.closest('.caso'));
+            painel.hidden = !painel.hidden;
+            detalhe.setAttribute('aria-expanded', String(!painel.hidden));
+            return;
+        }
+        const filtro = e.target.closest('[data-filtro]');
+        if (filtro) {
+            estado.filtroTestes = filtro.dataset.filtro;
+            $$('[data-filtro]').forEach(b => b.setAttribute('aria-pressed', String(b === filtro)));
+            aplicarFiltroTestes();
             return;
         }
         if (e.target.closest('#btn-executar-todos')) {
@@ -1646,9 +2022,60 @@ function registrarEventos() {
  * Início
  * ------------------------------------------------------------------- */
 
+/* ---------------------------------------------------------------------
+ * Escolha do servidor (quando o index.html é aberto fora da API)
+ * ------------------------------------------------------------------- */
+
+function montarSeletorServidor() {
+    const bloco = $('#servidor');
+    if (SERVIDO_PELA_API || window.HOOKFISHING_API) {
+        bloco.hidden = true;
+        return;
+    }
+    bloco.hidden = false;
+    const atual = Object.keys(SERVIDORES).find(k => SERVIDORES[k].url === API) || 'outro';
+    $$('[name="servidor"]').forEach(r => { r.checked = r.value === atual; });
+    $('#servidor-url').value = atual === 'outro' ? API : '';
+    $('#servidor-url').hidden = atual !== 'outro';
+    verificarServidor();
+}
+
+async function verificarServidor() {
+    const status = $('#servidor-status');
+    status.className = 'servidor__status';
+    status.textContent = 'Verificando...';
+    const alvo = API;
+    try {
+        // Qualquer resposta HTTP (até 401/404) prova que o servidor está no ar e liberou esta origem no CORS
+        await fetch(alvo + '/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        if (alvo !== API) return;
+        status.className = 'servidor__status servidor__status--ok';
+        status.textContent = `Conectado a ${alvo}`;
+    } catch {
+        if (alvo !== API) return;
+        status.className = 'servidor__status servidor__status--erro';
+        status.textContent = alvo.includes('onrender.com')
+            ? `Sem resposta de ${alvo}. No plano gratuito o Render pode levar até 1 minuto para acordar: tente de novo.`
+            : `Sem resposta de ${alvo}. Confira se a aplicação está rodando no IntelliJ.`;
+    }
+}
+
+function trocarServidor(url) {
+    const limpa = (url || '').trim().replace(/\/+$/, '');
+    if (!limpa || limpa === API) return;
+    API = limpa;
+    gravarStorage(BASE_STORAGE, limpa);
+    // A chave salva pertence ao servidor anterior
+    gravarStorage(CHAVE_STORAGE, null);
+    $('#link-swagger').href = API + '/swagger-ui/index.html';
+    $('#login-erro').hidden = true;
+    verificarServidor();
+}
+
 (async function iniciar() {
     registrarEventos();
     $('#link-swagger').href = (API || '') + '/swagger-ui/index.html';
+    montarSeletorServidor();
 
     const salva = lerStorage(CHAVE_STORAGE);
     if (salva && await abrirSessao(salva)) {

@@ -71,7 +71,7 @@ public class OpenApiConfig {
 
             - Clique em **Authorize** e entre com **e-mail e senha** (ex.: `admin@hookfishing.com` / `admin123`), \
             ou informe diretamente uma API Key no header `X-API-Key`.
-            - Todas as rotas exigem a chave, exceto `/auth/cadastro`, `/auth/login` e `GET /planos`.
+            - Todas as rotas exigem a chave, exceto `/auth/cadastro`, `/auth/login`, `GET /planos` e `GET /cors`.
             - Não tem conta? Crie em `POST /auth/cadastro` e entre em `POST /auth/login`, que devolve a sua API Key. \
             Contas novas começam como `VISITANTE`; um `ADMIN` altera o papel em `PUT /api-keys/{id}`.
 
@@ -125,6 +125,8 @@ public class OpenApiConfig {
             - Toda resposta traz `X-RateLimit-Limit` (capacidade), `X-RateLimit-Remaining` (fichas restantes), \
             `X-RateLimit-Reset` (segundos até o balde encher) e `X-RateLimit-Policy` (plano e recarga).
             - `GET /planos/limites` mostra o seu plano, as fichas restantes e as regras de bloqueio.
+            - Para ver o 429 pelo Swagger: *Authorize* com `cuidador@hookfishing.com` / `cuidador123` (Gratuito), \
+            execute `POST /planos/limites/simulacao` com `requisicoes=30` e depois qualquer outra rota.
 
             **Versionamento (X-API-Version)**
 
@@ -136,6 +138,8 @@ public class OpenApiConfig {
 
             - Só as origens configuradas podem chamar a API pelo navegador (padrão: `localhost:3000`, `localhost:5173`, \
             `localhost:5500`, `127.0.0.1:5500` e `localhost:8080`). Métodos: GET, POST, PUT, DELETE e OPTIONS.
+            - `GET /cors?origem=http://localhost:5500` informa se uma origem é aceita (o Swagger roda na mesma \
+            origem da API, então não consegue simular outra pelo navegador).
             - Headers liberados: `X-API-Key`, `Authorization`, `X-API-Version`, `X-Idempotency-Key`. O navegador \
             também consegue ler `Retry-After`, `X-RateLimit-*` e `Location` das respostas.
             - No Render, a URL pública do serviço é liberada automaticamente (variável `RENDER_EXTERNAL_URL`); \
@@ -291,7 +295,8 @@ public class OpenApiConfig {
             }
             openApi.getPaths().forEach((caminho, item) -> item.readOperationsMap().forEach((metodo, operacao) -> {
                 ApiResponses respostas = operacao.getResponses() == null ? new ApiResponses() : operacao.getResponses();
-                if (caminho.startsWith("/auth") || (caminho.equals("/planos") && metodo == PathItem.HttpMethod.GET)) {
+                if (caminho.startsWith("/auth") || caminho.equals("/cors")
+                        || (caminho.equals("/planos") && metodo == PathItem.HttpMethod.GET)) {
                     // Rotas públicas: sem X-API-Key, mas com rate limiting
                     operacao.setSecurity(new ArrayList<>());
                     String descricaoPublica = operacao.getDescription() == null ? "" : operacao.getDescription();
@@ -308,7 +313,7 @@ public class OpenApiConfig {
 
                 // Papéis permitidos nesta operação, calculados pela mesma matriz usada no ApiKeyInterceptor
                 Optional<Recurso> recurso = Recurso.doCaminho(caminho);
-                boolean propriaChave = caminho.equals("/api-keys/me");
+                boolean propriaChave = caminho.startsWith("/api-keys/me");
                 List<PapelAcesso> permitidos = propriaChave || recurso.isEmpty()
                         ? List.of(PapelAcesso.values())
                         : Permissoes.papeisPermitidos(recurso.get(), Operacao.doMetodo(metodo.name()));
